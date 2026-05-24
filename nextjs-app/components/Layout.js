@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useCart } from '../context/CartContext';
@@ -18,13 +18,13 @@ export default function Layout({ children }) {
   const [showBadge, setShowBadge] = useState(false);
   const msgsEndRef = useRef(null);
 
-  const STORE_NAME = 'Curfee Organic Market';
+  const STORE_NAME = 'Curify';
   const STORE_HOURS = '9:00 AM – 9:00 PM';
   const currentHour = new Date().getHours();
   const isOpen = currentHour >= 9 && currentHour < 21;
 
   const AUTO_REPLIES = {
-    greeting: `🌿 Welcome to ${STORE_NAME}!\n\nHi! I'm Curfee Bot, your 24/7 assistant.\n\nHow can I help?\n\n1️⃣ Track my order\n2️⃣ Product information\n3️⃣ Delivery & shipping\n4️⃣ Returns & refunds\n5️⃣ Speak to a human`,
+    greeting: `🌿 Welcome to ${STORE_NAME}!\n\nHi! I'm Curify Bot, your 24/7 assistant.\n\nHow can I help?\n\n1️⃣ Track my order\n2️⃣ Product information\n3️⃣ Delivery & shipping\n4️⃣ Returns & refunds\n5️⃣ Speak to a human`,
     order_tracking: `📦 Track Your Order\n\nTo track your order, go to the Account Dashboard or Support page.\n\nOr share your Order ID and we'll check it for you!\n\nOrders placed before 2 PM ship same day.`,
     delivery: `🚚 Delivery Info\n\n✅ Free delivery above ₹499\n📦 Standard: 2-4 business days\n⚡ Express: Next day (select areas)\n\nBelow ₹499 → ₹49 fee\nAbove ₹499 → FREE\n\n📍 We deliver across India!`,
     returns: `↩️ Returns & Refunds\n\n✅ 7-day easy returns\n✅ Full refund for damaged items\n✅ Replacement for wrong items\n\n1. Share order ID\n2. Tell us the issue\n3. We'll arrange pickup\n4. Refund in 5-7 days`,
@@ -142,7 +142,7 @@ export default function Layout({ children }) {
         <div className="m-header-top">
           <Link href="/" className="m-logo">
             <div className="m-logo-icon"><span>🌿</span></div>
-            <div className="m-logo-text"><span>Curfee</span><span>Organic</span></div>
+            <div className="m-logo-text"><span>Curify</span><span>Organic</span></div>
           </Link>
           <div className="m-header-actions">
             {user ? (
@@ -374,7 +374,7 @@ export default function Layout({ children }) {
         }}
       >
         <div className="cb-head" style={{
-          background: 'linear-gradient(135deg,#1B4332,#2D6A4F)',
+          background: 'linear-gradient(135deg,#1a5c38,#2D6A4F)',
           padding: '16px',
           display: 'flex',
           alignItems: 'center',
@@ -392,7 +392,7 @@ export default function Layout({ children }) {
             flexShrink: 0
           }}>🤖</div>
           <div>
-            <div className="cb-name" style={{ color: '#fff', fontWeight: 700, fontSize: '1rem' }}>Curfee Bot</div>
+            <div className="cb-name" style={{ color: '#fff', fontWeight: 700, fontSize: '1rem' }}>Curify Bot</div>
             <div className="cb-stat" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.73rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
               <span className="cb-dot" style={{
                 width: '7px',

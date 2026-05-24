@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useCart } from '../context/CartContext';
@@ -73,7 +73,7 @@ export default function Checkout() {
 
   const handleApplyCoupon = () => {
     const code = couponCode.trim().toUpperCase();
-    const coupons = { CURFEE10: 10, ORGANIC20: 20, FIRST50: 50 };
+    const coupons = { Curify10: 10, ORGANIC20: 20, FIRST50: 50 };
     if (coupons[code]) {
       setDiscountPercent(coupons[code]);
       addToast(`${coupons[code]}% off applied successfully! 🎉`, 'success');
@@ -215,7 +215,7 @@ export default function Checkout() {
           key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
           amount: razorpayOrder.amount,
           currency: razorpayOrder.currency,
-          name: 'Curfee Organic Market',
+          name: 'Curify',
           description: `Order ${orderId}`,
           order_id: razorpayOrder.id,
           prefill: {
@@ -223,7 +223,7 @@ export default function Checkout() {
             email: formData.email,
             contact: formData.phone
           },
-          theme: { color: '#1B4332' },
+          theme: { color: '#1a5c38' },
           handler: async function (paymentResponse) {
             // Verify payment on server
             try {

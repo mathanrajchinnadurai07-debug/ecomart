@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useCart } from '../context/CartContext';
@@ -26,11 +26,11 @@ export default function Dashboard() {
   const [cancelOtherReason, setCancelOtherReason] = useState('');
 
   // Referral code
-  const [referCode, setReferCode] = useState('CURFEE100');
+  const [referCode, setReferCode] = useState('Curify100');
 
   useEffect(() => {
     // Redirect if guest
-    if (!user && typeof window !== 'undefined' && localStorage.getItem('curfee_user') === null) {
+    if (!user && typeof window !== 'undefined' && localStorage.getItem('Curify_user') === null) {
       router.push('/login?redirect=/dashboard');
     }
   }, [user]);
@@ -51,7 +51,7 @@ export default function Dashboard() {
       // Generate refer code
       const namePart = (userProfile?.name || 'USER').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
       const randNum = Math.floor(100 + Math.random() * 900);
-      setReferCode(`CURFEE${namePart}${randNum}`);
+      setReferCode(`Curify${namePart}${randNum}`);
     }
   }, [user, userProfile]);
 
@@ -137,7 +137,7 @@ export default function Dashboard() {
   };
 
   const handleShareRefer = () => {
-    const msg = encodeURIComponent(`🌿 Shop organic with Curfee! Use my referral code ${referCode} and get ₹100 off your first order! 🛒\n\n${window.location.origin}`);
+    const msg = encodeURIComponent(`🌿 Shop organic with Curify! Use my referral code ${referCode} and get ₹100 off your first order! 🛒\n\n${window.location.origin}`);
     window.open(`https://wa.me/?text=${msg}`, '_blank');
   };
 
@@ -291,7 +291,7 @@ export default function Dashboard() {
               <div style={{ fontSize: '3rem', marginBottom: '12px' }}>🎫</div>
               <p style={{ color: '#888', marginBottom: '16px' }}>Apply coupon codes at checkout for deals:</p>
               <div style={{ background: 'linear-gradient(135deg,#e8f5e9,#c8e6c9)', padding: '16px', borderRadius: '8px', border: '2px dashed #2d6a4f', marginBottom: '12px' }}>
-                <strong style={{ fontSize: '1.1rem', color: '#2d6a4f' }}>CURFEE499</strong>
+                <strong style={{ fontSize: '1.1rem', color: '#2d6a4f' }}>Curify499</strong>
                 <div style={{ fontSize: '0.8rem', color: '#555', marginTop: '4px' }}>Free delivery on order above ₹499</div>
               </div>
               <div style={{ background: 'linear-gradient(135deg,#fff3e0,#ffe0b2)', padding: '16px', borderRadius: '8px', border: '2px dashed #ff9800' }}>
@@ -433,7 +433,7 @@ export default function Dashboard() {
           <div className="fk-list-item" onClick={() => setActiveTab('coupons')} style={{ display: 'flex', alignItems: 'center', background: '#fff', border: '1px solid var(--border)', borderRadius: '8px', padding: '14px', marginBottom: '10px', cursor: 'pointer' }}>
             <div className="fk-list-icon" style={{ fontSize: '1.5rem', marginRight: '12px' }}>🎫</div>
             <div style={{ flex: 1 }}>
-              <strong style={{ fontSize: '0.88rem', display: 'block' }}>Curfee Coupons</strong>
+              <strong style={{ fontSize: '0.88rem', display: 'block' }}>Curify Coupons</strong>
               <span style={{ fontSize: '0.76rem', color: 'var(--text-light)' }}>Free delivery & discounts on organic products</span>
             </div>
             <i className="fas fa-chevron-right fk-list-arrow" style={{ color: '#cbd5e1' }}></i>

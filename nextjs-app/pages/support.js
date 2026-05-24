@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useCart } from '../context/CartContext';
 import { db } from '../firebase/config';
@@ -102,8 +102,8 @@ export default function Support() {
   return (
     <>
       <Head>
-        <title>Help & Support — Curfee Organic Market</title>
-        <meta name="description" content="We're here to help you with anything you need. Get in touch with Curfee Organic Support for orders, products, delivery, and refunds." />
+        <title>Help & Support — Curify</title>
+        <meta name="description" content="We're here to help you with anything you need. Get in touch with Curify Support for orders, products, delivery, and refunds." />
       </Head>
 
       <div className="container section">
@@ -210,7 +210,7 @@ export default function Support() {
                   <div>
                     <strong>Email</strong>
                     <br />
-                    <span style={{ color: 'var(--text-light)' }}>curfee01@gmail.com</span>
+                    <span style={{ color: 'var(--text-light)' }}>Curify01@gmail.com</span>
                   </div>
                 </div>
                 

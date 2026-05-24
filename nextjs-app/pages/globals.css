@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 /* ============================================================
-   Curfee Organic Market â€” Flipkart Style Checkout 
+   Curify â€” Flipkart Style Checkout 
    ============================================================ */
 
 body.checkout-body { 
@@ -260,7 +260,7 @@ body.checkout-body {
 .fk-cat-page { font-family:'Inter',sans-serif; background:#F9F5F0; min-height:100vh; padding-bottom:80px; }
 
 /* Top bar */
-.fk-topbar { background:linear-gradient(135deg,#1B4332,#2D6A4F); padding:12px 16px; position:sticky; top:0; z-index:100; }
+.fk-topbar { background:linear-gradient(135deg,#1a5c38,#2D6A4F); padding:12px 16px; position:sticky; top:0; z-index:100; }
 .fk-topbar-inner { display:flex; align-items:center; gap:12px; }
 .fk-topbar .fk-logo { color:#fff; font-weight:800; font-size:1.2rem; text-decoration:none; display:flex; align-items:center; gap:6px; }
 .fk-topbar .fk-logo span { font-weight:500; font-size:0.7rem; color:rgba(255,255,255,0.8); display:block; margin-top:-2px; }
@@ -381,7 +381,7 @@ body.checkout-body {
 .bb-label { font-size: 0.75rem; font-weight: 600; line-height: 1.25; text-align: center; color: #333; display: block; }
 .mb-3 { margin-bottom: 16px; }
 /* ============================================================
-   Curfee Organic Market â€” Mobile-First Home (Amazon + Flipkart)
+   Curify â€” Mobile-First Home (Amazon + Flipkart)
    ============================================================ */
 
 /* ===== BODY OVERRIDES ===== */
@@ -393,7 +393,7 @@ body.checkout-body {
 /* ===== MOBILE HEADER ===== */
 .m-header {
   position: sticky; top: 0; z-index: 200;
-  background: linear-gradient(135deg, #1B4332, #2D6A4F);
+  background: linear-gradient(135deg, #1a5c38, #2D6A4F);
   padding: 10px 14px 8px;
   box-shadow: 0 2px 16px rgba(27,67,50,0.25);
 }
@@ -666,7 +666,7 @@ body.checkout-body {
 .m-promo-text h3 { font-size: 1.1rem; font-weight: 800; margin: 4px 0 2px; }
 .m-promo-text p { font-size: 0.75rem; opacity: 0.85; }
 .m-promo-cta {
-  background: #fff; color: #1b4332;
+  background: #fff; color: #1a5c38;
   padding: 8px 20px; border-radius: 8px;
   font-size: 0.78rem; font-weight: 700;
   text-decoration: none; white-space: nowrap;
@@ -704,7 +704,7 @@ body.checkout-body {
   margin: 10px 14px; border-radius: 16px; overflow: hidden;
 }
 .m-newsletter-inner {
-  background: linear-gradient(135deg, #1B4332, #2D6A4F);
+  background: linear-gradient(135deg, #1a5c38, #2D6A4F);
   padding: 24px 20px; text-align: center; color: #fff;
 }
 .m-newsletter h2 { font-size: 1.1rem; margin-bottom: 4px; }
@@ -725,7 +725,7 @@ body.checkout-body {
 
 /* ===== FOOTER ===== */
 .m-footer {
-  background: #1B4332; color: rgba(255,255,255,0.8);
+  background: #1a5c38; color: rgba(255,255,255,0.8);
   padding: 24px 14px 16px;
 }
 .m-footer-top {
@@ -936,7 +936,7 @@ body.checkout-body {
 }
 
 /* ============================================================
-   Curfee Organic Market â€” Search View Formats
+   Curify â€” Search View Formats
    ============================================================ */
 
 body.search-mode {
@@ -1122,14 +1122,14 @@ body.search-mode {
   line-height: 1.3;
 }
 /* ==================================================
-   Curfee Organic Market â€” Premium Organic Design System
+   Curify â€” Premium Organic Design System
    ================================================== */
 
 :root {
-  --primary: #2D6A4F; --primary-dark: #1B4332; --primary-light: #52B788;
+  --primary: #2D6A4F; --primary-dark: #1a5c38; --primary-light: #52B788;
   --accent: #E76F51; --accent-light: #F4A261;
   --success: #40916C; --danger: #E63946; --warning: #E9C46A;
-  --bg: #F9F5F0; --bg-card: #ffffff; --bg-dark: #1B4332;
+  --bg: #F9F5F0; --bg-card: #ffffff; --bg-dark: #1a5c38;
   --text: #2B2D42; --text-light: #8D99AE; --text-white: #FEFAE0;
   --border: #E8E0D8; --shadow: 0 2px 20px rgba(43,45,66,0.06);
   --shadow-lg: 0 8px 40px rgba(43,45,66,0.10);
@@ -1495,7 +1495,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 .hidden { display: none !important; }
 
 
-/* Curfee Premium Earthy Product Cards */
+/* Curify Premium Earthy Product Cards */
 .crf-card { background: transparent; padding: 0; box-shadow: none; border: none; display: flex; flex-direction: column; overflow: visible; font-family: 'Georgia', serif; }
 .crf-card-inner { background: #fbfbf4; border-radius: 12px; position: relative; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #e2ebd9; overflow: visible; z-index: 1; padding: 12px; }
 .crf-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
@@ -1619,3 +1619,79 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
   .mob-sort-option { display: flex; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.95rem; }
   .mob-sort-option input { width: 18px; height: 18px; accent-color: var(--primary); }
 }
+
+/* ============================================================
+   Trust Badges & Certifications Section
+   ============================================================ */
+.m-trust-section { padding: 24px 16px; }
+
+.m-trust-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.m-trust-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #e8f5e9;
+  border-radius: 14px;
+  padding: 16px 10px;
+  box-shadow: 0 2px 8px rgba(26,92,56,0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.m-trust-badge:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px rgba(26,92,56,0.12);
+}
+
+.m-trust-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.m-trust-badge strong {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  line-height: 1.3;
+}
+
+.m-trust-badge span {
+  font-size: 0.68rem;
+  color: #666;
+  line-height: 1.3;
+}
+
+.m-cert-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 16px;
+  padding: 0 4px;
+}
+
+.m-cert-pill {
+  background: linear-gradient(135deg, rgba(26,92,56,0.08), rgba(26,92,56,0.04));
+  border: 1px solid rgba(26,92,56,0.2);
+  color: #1a5c38;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+

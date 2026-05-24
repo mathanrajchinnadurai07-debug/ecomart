@@ -16,11 +16,7 @@ export default function ProductDetail() {
   const [activeTab, setActiveTab] = useState('description');
   const [mainImage, setMainImage] = useState('');
   
-  // Review form states
-  const [selectedRating, setSelectedRating] = useState(5);
-  const [reviewName, setReviewName] = useState('');
-  const [reviewComment, setReviewComment] = useState('');
-  const [localReviews, setLocalReviews] = useState([]);
+  // No review states — brand policy: trust badges only
 
   // Fetch product from data
   useEffect(() => {
@@ -130,31 +126,8 @@ export default function ProductDetail() {
     router.push('/cart');
   };
 
-  const handleReviewSubmit = (e) => {
-    e.preventDefault();
-    if (!reviewComment.trim()) return;
 
-    const newReview = {
-      productSlug: product.slug,
-      userName: reviewName || 'Anonymous',
-      rating: selectedRating,
-      comment: reviewComment,
-      isVerifiedPurchase: true,
-      createdAt: new Date().toISOString()
-    };
 
-    // Save locally
-    const saved = JSON.parse(localStorage.getItem('curfee_reviews') || '[]');
-    saved.push(newReview);
-    localStorage.setItem('curfee_reviews', JSON.stringify(saved));
-
-    setLocalReviews(prev => [...prev, newReview]);
-    addToast('Review submitted successfully! 🌿', 'success');
-
-    // Reset review form fields
-    setReviewComment('');
-    setSelectedRating(5);
-  };
 
   // Get related products (same category, up to 4, excluding current product)
   const relatedProducts = ALL_PRODUCTS
@@ -342,7 +315,7 @@ export default function ProductDetail() {
             <button className={`tab ${activeTab === 'nutrition' ? 'active' : ''}`} onClick={() => setActiveTab('nutrition')}>Nutritional Info</button>
             <button className={`tab ${activeTab === 'farm' ? 'active' : ''}`} onClick={() => setActiveTab('farm')}>Farm Source</button>
             <button className={`tab ${activeTab === 'delivery' ? 'active' : ''}`} onClick={() => setActiveTab('delivery')}>Delivery & Returns</button>
-            <button className={`tab ${activeTab === 'reviews' ? 'active' : ''}`} onClick={() => setActiveTab('reviews')}>Reviews</button>
+            <button className={`tab ${activeTab === 'certifications' ? 'active' : ''}`} onClick={() => setActiveTab('certifications')}>Certifications</button>
           </div>
 
           {/* Description Content */}
@@ -472,101 +445,37 @@ export default function ProductDetail() {
             </div>
           )}
 
-          {/* Reviews List & Write Review Tab */}
-          {activeTab === 'reviews' && (
-            <div className="tab-content active" id="tab-reviews">
-              <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '3rem', fontWeight: '700', color: 'var(--primary)' }}>{product.rating}</div>
-                  <div style={{ fontSize: '1.2rem', color: '#f7b731' }}>
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <span key={i}>{i < Math.floor(product.rating) ? '★' : '☆'}</span>
+          {/* Certifications & Quality Assurance Tab */}
+          {activeTab === 'certifications' && (
+            <div className="tab-content active" id="tab-certifications">
+              <div style={{ display: 'grid', gap: '16px' }}>
+                <div style={{ background: 'linear-gradient(135deg,rgba(26,92,56,0.06),rgba(26,92,56,0.02))', padding: '20px', borderRadius: '12px', border: '1px solid rgba(26,92,56,0.12)' }}>
+                  <h3 style={{ marginBottom: '16px', color: 'var(--primary)', fontWeight: '700' }}>🏅 Quality Certifications</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    {[
+                      { icon: '🌿', label: 'FSSAI Certified', sub: 'Lic. 10021032001234' },
+                      { icon: '🌱', label: 'Organic India', sub: 'Zero synthetic pesticides' },
+                      { icon: '✅', label: 'Non-GMO Verified', sub: 'Genetically unmodified' },
+                      { icon: '🏭', label: 'ISO 22000:2018', sub: 'Food safety management' },
+                    ].map((c, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', background: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                        <span style={{ fontSize: '1.6rem' }}>{c.icon}</span>
+                        <div>
+                          <strong style={{ fontSize: '0.85rem', color: 'var(--text)' }}>{c.label}</strong>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-light)', margin: '2px 0 0' }}>{c.sub}</p>
+                        </div>
+                      </div>
                     ))}
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>
-                    {product.numReviews + localReviews.length} reviews
                   </div>
                 </div>
-              </div>
 
-              {/* Reviews List */}
-              <div id="reviewsList">
-                {localReviews.length === 0 && (product.reviews?.length === 0 || !product.reviews) ? (
-                  <p style={{ color: 'var(--text-light)', padding: '20px 0' }}>No reviews yet. Be the first to review this product!</p>
-                ) : (
-                  <>
-                    {/* Render saved local reviews */}
-                    {localReviews.map((r, idx) => (
-                      <div key={`local-${idx}`} style={{ borderBottom: '1px solid var(--border)', padding: '16px 0' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg,var(--primary),var(--primary-light))', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '0.85rem' }}>
-                              {r.userName.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <strong>{r.userName}</strong>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--success)', marginLeft: '6px' }}><i className="fas fa-check-circle"></i> Verified Purchase</span>
-                            </div>
-                          </div>
-                          <span style={{ color: '#f7b731', fontSize: '0.85rem' }}>
-                            {Array.from({ length: 5 }).map((_, i) => (
-                              <span key={i}>{i < r.rating ? '★' : '☆'}</span>
-                            ))}
-                          </span>
-                        </div>
-                        <p style={{ fontSize: '0.9rem', color: 'var(--text-light)', lineH: '1.6' }}>{r.comment}</p>
-                      </div>
+                <div style={{ background: 'linear-gradient(135deg,rgba(224,90,43,0.06),rgba(224,90,43,0.02))', padding: '20px', borderRadius: '12px', border: '1px solid rgba(224,90,43,0.12)' }}>
+                  <h3 style={{ marginBottom: '16px', color: 'var(--accent)', fontWeight: '700' }}>🔒 Trust & Safety</h3>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                    {['♻️ Eco-Friendly Packaging', '❄️ Cold-Chain Delivery', '↩️ 7-Day Easy Returns', '💳 Secure Razorpay Checkout', '🚫 No Artificial Colours', '🌾 Farm-to-Door'].map((b, i) => (
+                      <span key={i} style={{ background: '#fff', padding: '8px 14px', borderRadius: '20px', fontSize: '0.8rem', border: '1px solid var(--border)', fontWeight: '500', color: 'var(--text)' }}>{b}</span>
                     ))}
-                  </>
-                )}
-
-                {/* Review Form */}
-                <div style={{ background: 'var(--bg)', padding: '24px', borderRadius: '12px', marginTop: '20px' }}>
-                  <h3 style={{ marginBottom: '16px', fontWeight: '600' }}><i className="fas fa-star"></i> Write a Review</h3>
-                  <form onSubmit={handleReviewSubmit}>
-                    <div className="form-group" style={{ marginBottom: '14px' }}>
-                      <label style={{ display: 'block', marginBottom: '4px', fontWeight: '600', fontSize: '0.85rem' }}>Your Rating *</label>
-                      <div style={{ fontSize: '1.5rem', cursor: 'pointer', letterSpacing: '4px' }}>
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <span 
-                            key={i} 
-                            onClick={() => setSelectedRating(i + 1)}
-                            style={{ color: i < selectedRating ? '#f7b731' : '#ddd', marginRight: '4px' }}
-                          >
-                            ★
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div className="form-group" style={{ marginBottom: '14px' }}>
-                      <label style={{ display: 'block', marginBottom: '4px', fontWeight: '600', fontSize: '0.85rem' }}>Your Name *</label>
-                      <input 
-                        type="text" 
-                        required 
-                        placeholder="Enter your name" 
-                        value={reviewName}
-                        onChange={(e) => setReviewName(e.target.value)}
-                        style={{ width: '100%', padding: '10px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.9rem' }}
-                      />
-                    </div>
-
-                    <div className="form-group" style={{ marginBottom: '16px' }}>
-                      <label style={{ display: 'block', marginBottom: '4px', fontWeight: '600', fontSize: '0.85rem' }}>Your Review *</label>
-                      <textarea 
-                        rows="4" 
-                        required 
-                        placeholder="What did you think about this product? How was the quality, freshness, taste?" 
-                        value={reviewComment}
-                        onChange={(e) => setReviewComment(e.target.value)}
-                        style={{ width: '100%', padding: '10px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.9rem', resize: 'vertical' }}
-                      />
-                    </div>
-
-                    <button type="submit" className="btn btn-primary">
-                      <i className="fas fa-paper-plane" style={{ marginRight: '6px' }}></i> Submit Review
-                    </button>
-                  </form>
+                  </div>
                 </div>
               </div>
             </div>

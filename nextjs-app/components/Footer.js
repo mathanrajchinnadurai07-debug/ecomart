@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import Link from 'next/link';
 import { useCart } from '../context/CartContext';
 
@@ -38,7 +38,7 @@ export default function Footer() {
         <div className="m-footer-brand">
           <div className="m-logo" style={{ justifyContent: 'flex-start', marginBottom: '8px' }}>
             <div className="m-logo-icon"><span>🌿</span></div>
-            <div className="m-logo-text"><span>Curfee</span><span>Organic</span></div>
+            <div className="m-logo-text"><span>Curify</span><span>Organic</span></div>
           </div>
           <p>50+ organic products across 16 categories.</p>
           <div className="m-footer-social">
@@ -76,7 +76,7 @@ export default function Footer() {
         </div>
       </div>
       <div className="m-footer-bottom">
-        <p>&copy; 2026 Curfee Organic Market. Made with 🌿 in India</p>
+        <p>&copy; 2026 Curify. Made with 🌿 in India</p>
       </div>
     </footer>
   );

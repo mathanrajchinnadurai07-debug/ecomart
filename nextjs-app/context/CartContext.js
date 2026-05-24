@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+﻿import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth, db } from '../firebase/config';
 import { 
   onAuthStateChanged, 
@@ -49,7 +49,7 @@ export const CartProvider = ({ children }) => {
       setLoading(true);
       if (currentUser) {
         setUser(currentUser);
-        localStorage.setItem('curfee_token', 'firebase_' + currentUser.uid);
+        localStorage.setItem('Curify_token', 'firebase_' + currentUser.uid);
 
         // Fetch user profile
         try {
@@ -69,7 +69,7 @@ export const CartProvider = ({ children }) => {
             await setDoc(userDocRef, profileData);
           }
           setUserProfile({ uid: currentUser.uid, ...profileData });
-          localStorage.setItem('curfee_user', JSON.stringify({ uid: currentUser.uid, ...profileData }));
+          localStorage.setItem('Curify_user', JSON.stringify({ uid: currentUser.uid, ...profileData }));
 
           // Check if admin
           try {
@@ -86,7 +86,7 @@ export const CartProvider = ({ children }) => {
           }
 
           // Merge local cart to Firestore if there are items
-          const localCart = JSON.parse(localStorage.getItem('curfee_cart') || '[]');
+          const localCart = JSON.parse(localStorage.getItem('Curify_cart') || '[]');
           if (localCart.length > 0) {
             const batch = writeBatch(db);
             for (const item of localCart) {
@@ -102,7 +102,7 @@ export const CartProvider = ({ children }) => {
               }, { merge: true });
             }
             await batch.commit();
-            localStorage.removeItem('curfee_cart');
+            localStorage.removeItem('Curify_cart');
           }
         } catch (error) {
           console.error('Error handling logged in user profile:', error);
@@ -111,17 +111,17 @@ export const CartProvider = ({ children }) => {
         setUser(null);
         setUserProfile(null);
         setIsAdmin(false);
-        localStorage.removeItem('curfee_token');
-        localStorage.removeItem('curfee_user');
+        localStorage.removeItem('Curify_token');
+        localStorage.removeItem('Curify_user');
         // Load cart from local storage
-        const localCart = JSON.parse(localStorage.getItem('curfee_cart') || '[]');
+        const localCart = JSON.parse(localStorage.getItem('Curify_cart') || '[]');
         setCart(localCart);
       }
       setLoading(false);
     });
 
     // Sync wishlist from local storage initially
-    const localWishlist = JSON.parse(localStorage.getItem('curfee_wishlist') || '[]');
+    const localWishlist = JSON.parse(localStorage.getItem('Curify_wishlist') || '[]');
     setWishlist(localWishlist);
 
     return () => unsubscribe();
@@ -160,7 +160,7 @@ export const CartProvider = ({ children }) => {
       addToast('Added to wishlist! 💖', 'success');
     }
     setWishlist(updated);
-    localStorage.setItem('curfee_wishlist', JSON.stringify(updated));
+    localStorage.setItem('Curify_wishlist', JSON.stringify(updated));
   };
 
   const isInWishlist = (productId) => {
@@ -224,7 +224,7 @@ export const CartProvider = ({ children }) => {
         });
       }
       setCart(localCart);
-      localStorage.setItem('curfee_cart', JSON.stringify(localCart));
+      localStorage.setItem('Curify_cart', JSON.stringify(localCart));
       addToast(`${product.name} added to cart! 🛒`, 'success');
     }
   };
@@ -242,7 +242,7 @@ export const CartProvider = ({ children }) => {
     } else {
       const updated = cart.filter((i) => !(i.productId === productId && i.weight === weight));
       setCart(updated);
-      localStorage.setItem('curfee_cart', JSON.stringify(updated));
+      localStorage.setItem('Curify_cart', JSON.stringify(updated));
       addToast('Item removed from cart', 'info');
     }
   };
@@ -264,7 +264,7 @@ export const CartProvider = ({ children }) => {
         return i;
       });
       setCart(updated);
-      localStorage.setItem('curfee_cart', JSON.stringify(updated));
+      localStorage.setItem('Curify_cart', JSON.stringify(updated));
     }
   };
 
@@ -282,7 +282,7 @@ export const CartProvider = ({ children }) => {
       }
     } else {
       setCart([]);
-      localStorage.removeItem('curfee_cart');
+      localStorage.removeItem('Curify_cart');
     }
   };
 
@@ -293,9 +293,9 @@ export const CartProvider = ({ children }) => {
       setUserProfile(null);
       setIsAdmin(false);
       setCart([]);
-      localStorage.removeItem('curfee_token');
-      localStorage.removeItem('curfee_user');
-      localStorage.removeItem('curfee_cart');
+      localStorage.removeItem('Curify_token');
+      localStorage.removeItem('Curify_user');
+      localStorage.removeItem('Curify_cart');
       addToast('Logged out successfully', 'info');
     } catch (e) {
       console.error('Logout error:', e);

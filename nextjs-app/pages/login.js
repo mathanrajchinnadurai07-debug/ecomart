@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { auth, googleProvider, db } from '../firebase/config';
@@ -69,7 +69,7 @@ export default function Login() {
         createdAt: serverTimestamp()
       });
 
-      addToast('Account created! Welcome to Curfee 🌿', 'success');
+      addToast('Account created! Welcome to Curify 🌿', 'success');
     } catch (err) {
       console.error(err);
       let msg = err.message;
@@ -106,7 +106,7 @@ export default function Login() {
         <div className="auth-logo" style={{ textAlign: 'center', marginBottom: '20px' }}>
           <Link href="/" className="logo" style={{ justifyContent: 'center', display: 'flex', textDecoration: 'none' }}>
             <div className="logo-icon">🌿</div> 
-            <span style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--primary)' }}>Curfee</span>
+            <span style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--primary)' }}>Curify</span>
             <span style={{ fontSize: '1.5rem', fontWeight: '400', color: 'var(--text)' }}>Organic</span>
           </Link>
         </div>

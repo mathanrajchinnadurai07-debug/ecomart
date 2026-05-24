@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import Link from 'next/link';
 import { useCart } from '../context/CartContext';
 
@@ -12,7 +12,7 @@ export default function Navbar() {
       <div className="m-navbar-inner">
         <Link href="/" className="m-logo">
           <div className="m-logo-icon"><span>🌿</span></div>
-          <div className="m-logo-text"><span>Curfee</span><span>Organic</span></div>
+          <div className="m-logo-text"><span>Curify</span><span>Organic</span></div>
         </Link>
 
         <div className="m-navbar-links">

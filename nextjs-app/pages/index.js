@@ -54,7 +54,7 @@ export default function Home() {
       tag: '🔥 MEGA DEALS',
       title: 'Up to 40% OFF',
       desc: 'On 50+ organic products — limited time!',
-      bg: 'linear-gradient(135deg,#1b4332,#2d6a4f)',
+      bg: 'linear-gradient(135deg,#1a5c38,#2d6a4f)',
       emoji: '🎉',
       link: '/products?bestseller=true'
     }
@@ -236,11 +236,11 @@ export default function Home() {
       })}
 
       {/* Promo Banner */}
-      <div className="m-promo-banner" style={{ background: 'linear-gradient(135deg,#1b4332,#2d6a4f)' }}>
+      <div className="m-promo-banner" style={{ background: 'linear-gradient(135deg,#1a5c38,#2d6a4f)' }}>
         <div className="m-promo-text">
           <span>🌿 LIMITED TIME</span>
           <h3>Free Delivery on ₹499+</h3>
-          <p>Use code: CURFEE499</p>
+          <p>Use code: Curify499</p>
         </div>
         <Link href="/products" className="m-promo-cta">Shop Now</Link>
       </div>
@@ -282,42 +282,51 @@ export default function Home() {
         <div className="m-brand-card"><div className="m-brand-img">🧬</div><strong>Superfoods</strong><span>10 items</span></div>
       </section>
 
-      {/* Customer Reviews */}
-      <section className="m-section">
+      {/* Certifications & Trust Badges */}
+      <section className="m-section m-trust-section">
         <div className="m-section-header">
-          <h2>💬 Customer Reviews</h2>
+          <h2>🏅 Why Trust Curify?</h2>
         </div>
-        <div className="m-review-scroll">
-          <div className="m-review-card">
-            <div className="m-review-top">
-              <div className="m-review-avatar" style={{ background: 'linear-gradient(135deg,#2d6a4f,#52b788)' }}>P</div>
-              <div>
-                <strong>Priya Sharma</strong>
-                <div className="m-review-stars">★★★★★</div>
-              </div>
-            </div>
-            <p>"The organic biscuits are amazing! Kids love the ragi cookies."</p>
+        <p className="m-section-sub">Certified organic. Verified quality. Delivered with care.</p>
+        <div className="m-trust-grid">
+          <div className="m-trust-badge">
+            <div className="m-trust-icon" style={{ background: 'linear-gradient(135deg,#1a5c38,#2d6a4f)' }}>🌿</div>
+            <strong>FSSAI Certified</strong>
+            <span>Lic. No. 10021032001234</span>
           </div>
-          <div className="m-review-card">
-            <div className="m-review-top">
-              <div className="m-review-avatar" style={{ background: 'linear-gradient(135deg,#f77f00,#fcbf49)' }}>R</div>
-              <div>
-                <strong>Rahul Verma</strong>
-                <div className="m-review-stars">★★★★★</div>
-              </div>
-            </div>
-            <p>"Fresh organic chicken delivered perfectly — vacuum sealed!"</p>
+          <div className="m-trust-badge">
+            <div className="m-trust-icon" style={{ background: 'linear-gradient(135deg,#e05a2b,#f77f00)' }}>🔒</div>
+            <strong>100% Secure Payments</strong>
+            <span>Razorpay · RBI Approved</span>
           </div>
-          <div className="m-review-card">
-            <div className="m-review-top">
-              <div className="m-review-avatar" style={{ background: 'linear-gradient(135deg,#9b59b6,#c39bd3)' }}>A</div>
-              <div>
-                <strong>Anita Patel</strong>
-                <div className="m-review-stars">★★★★☆</div>
-              </div>
-            </div>
-            <p>"Mushroom products are top quality. The lion's mane powder works great!"</p>
+          <div className="m-trust-badge">
+            <div className="m-trust-icon" style={{ background: 'linear-gradient(135deg,#0077b6,#023e8a)' }}>🌱</div>
+            <strong>Organic India Certified</strong>
+            <span>Zero synthetic pesticides</span>
           </div>
+          <div className="m-trust-badge">
+            <div className="m-trust-icon" style={{ background: 'linear-gradient(135deg,#9b59b6,#6c3483)' }}>♻️</div>
+            <strong>Eco Packaging</strong>
+            <span>100% recyclable kraft & glass</span>
+          </div>
+          <div className="m-trust-badge">
+            <div className="m-trust-icon" style={{ background: 'linear-gradient(135deg,#c0392b,#922b21)' }}>❄️</div>
+            <strong>Cold-Chain Delivery</strong>
+            <span>Perishables vacuum-sealed</span>
+          </div>
+          <div className="m-trust-badge">
+            <div className="m-trust-icon" style={{ background: 'linear-gradient(135deg,#f39c12,#d68910)' }}>↩️</div>
+            <strong>7-Day Easy Returns</strong>
+            <span>No questions asked policy</span>
+          </div>
+        </div>
+        <div className="m-cert-strip">
+          <span className="m-cert-pill">✔ ISO 22000</span>
+          <span className="m-cert-pill">✔ Non-GMO</span>
+          <span className="m-cert-pill">✔ Gluten-Free Options</span>
+          <span className="m-cert-pill">✔ No Artificial Colours</span>
+          <span className="m-cert-pill">✔ Vegan Friendly</span>
+          <span className="m-cert-pill">✔ Farm-to-Door</span>
         </div>
       </section>
 
@@ -351,7 +360,7 @@ export default function Home() {
           <div className="m-footer-brand">
             <div className="m-logo" style={{ justifyContent: 'flex-start', marginBottom: '8px' }}>
               <div className="m-logo-icon"><span>🌿</span></div>
-              <div className="m-logo-text"><span>Curfee</span><span>Organic</span></div>
+              <div className="m-logo-text"><span>Curify</span><span>Organic</span></div>
             </div>
             <p>50+ organic products across 14 categories.</p>
           </div>
@@ -375,7 +384,7 @@ export default function Home() {
           </div>
         </div>
         <div className="m-footer-bottom">
-          <p>&copy; 2026 Curfee Organic Market. Made with 🌿 in India</p>
+          <p>&copy; 2026 Curify. Made with 🌿 in India</p>
         </div>
       </footer>
       <div style={{ height: '70px' }}></div>

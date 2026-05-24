@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useCart } from '../context/CartContext';
@@ -13,7 +13,7 @@ export default function GreenMember() {
 
   useEffect(() => {
     // Redirect to login if user profile does not exist in local storage or auth is not initialized
-    const cachedUser = localStorage.getItem('curfee_user');
+    const cachedUser = localStorage.getItem('Curify_user');
     if (!user && !cachedUser) {
       addToast('Please login to check your Green Member status!', 'info');
       router.push('/login?redirect=/green-member');
@@ -30,13 +30,13 @@ export default function GreenMember() {
           setOrderCount(snap.size);
         } else {
           // Fallback to local storage
-          const localOrders = JSON.parse(localStorage.getItem('curfee_orders') || '[]');
+          const localOrders = JSON.parse(localStorage.getItem('Curify_orders') || '[]');
           setOrderCount(localOrders.length);
         }
       } catch (error) {
         console.error('Error fetching orders count:', error);
         // Fallback to local storage on error
-        const localOrders = JSON.parse(localStorage.getItem('curfee_orders') || '[]');
+        const localOrders = JSON.parse(localStorage.getItem('Curify_orders') || '[]');
         setOrderCount(localOrders.length);
       } finally {
         setLoading(false);
@@ -79,8 +79,8 @@ export default function GreenMember() {
   return (
     <>
       <Head>
-        <title>Green Member Loyalty Program — Curfee Organic Market</title>
-        <meta name="description" content="Unlock exclusive discounts, priority delivery, and premium cashback by joining the Curfee Organic Green Member loyalty tier." />
+        <title>Green Member Loyalty Program — Curify</title>
+        <meta name="description" content="Unlock exclusive discounts, priority delivery, and premium cashback by joining the Curify Green Member loyalty tier." />
       </Head>
 
       <div style={{ maxWidth: '600px', margin: '0 auto', background: '#f5f5f5', minHeight: 'calc(100vh - 120px)', paddingBottom: '30px' }}>

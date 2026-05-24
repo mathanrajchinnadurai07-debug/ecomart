@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useCart } from '../context/CartContext';
@@ -325,7 +325,7 @@ export default function OrderTracking() {
                 <div className="card-body" style={{ padding: '20px' }}>
                   <div className="action-row" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                     <a 
-                      href={`https://wa.me/${STORE_WHATSAPP}?text=${encodeURIComponent('Hi Curfee! I need help with my order: ' + order.id)}`} 
+                      href={`https://wa.me/${STORE_WHATSAPP}?text=${encodeURIComponent('Hi Curify! I need help with my order: ' + order.id)}`} 
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="btn btn-whatsapp"

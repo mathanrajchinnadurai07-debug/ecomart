@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useCart } from '../context/CartContext';
@@ -11,7 +11,7 @@ export default function Cart() {
 
   const handleApplyCoupon = (e) => {
     e.preventDefault();
-    if (couponCode.toUpperCase() === 'CURFEE499') {
+    if (couponCode.toUpperCase() === 'Curify499') {
       addToast('Coupon applied successfully! 🌿', 'success');
       // Set a 10% coupon discount
       setDiscountAmount(Math.round(subtotal * 0.1));
@@ -172,7 +172,7 @@ export default function Cart() {
                 <form onSubmit={handleApplyCoupon} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <input 
                     type="text" 
-                    placeholder="Coupon code (e.g. CURFEE499)" 
+                    placeholder="Coupon code (e.g. Curify499)" 
                     value={couponCode}
                     onChange={(e) => setCouponCode(e.target.value)}
                     style={{ width: '100%', padding: '10px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.85rem' }}

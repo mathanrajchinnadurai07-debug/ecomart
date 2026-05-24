@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+﻿import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth, db, googleProvider } from '../firebase/config';
 import {
   onAuthStateChanged,
@@ -67,12 +67,12 @@ export const AuthProvider = ({ children }) => {
       if (user) {
         setCurrentUser(user);
         await fetchOrCreateProfile(user);
-        localStorage.setItem('curfee_token', 'firebase_' + user.uid);
+        localStorage.setItem('Curify_token', 'firebase_' + user.uid);
       } else {
         setCurrentUser(null);
         setUserProfile(null);
-        localStorage.removeItem('curfee_token');
-        localStorage.removeItem('curfee_user');
+        localStorage.removeItem('Curify_token');
+        localStorage.removeItem('Curify_user');
       }
       setLoading(false);
     });
@@ -148,9 +148,9 @@ export const AuthProvider = ({ children }) => {
       await signOut(auth);
       setCurrentUser(null);
       setUserProfile(null);
-      localStorage.removeItem('curfee_token');
-      localStorage.removeItem('curfee_user');
-      localStorage.removeItem('curfee_cart');
+      localStorage.removeItem('Curify_token');
+      localStorage.removeItem('Curify_user');
+      localStorage.removeItem('Curify_cart');
     } catch (error) {
       console.error('Logout error:', error);
     }

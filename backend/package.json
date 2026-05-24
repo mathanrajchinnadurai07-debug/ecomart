@@ -1,7 +1,7 @@
-{
+﻿{
   "name": "backend",
   "version": "1.0.0",
-  "description": "EcoMart / Curfee Organic e-commerce backend",
+  "description": "EcoMart / Curify e-commerce backend",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
