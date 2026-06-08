@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useCart } from '../context/CartContext';
@@ -47,6 +47,37 @@ export default function Layout({ children }) {
       msgsEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages, isTyping]);
+
+  // Inactivity session timeout (15 mins)
+  useEffect(() => {
+    if (!user) return;
+
+    let timeoutId;
+    const INACTIVITY_LIMIT = 15 * 60 * 1000; // 15 minutes
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        logout();
+        addToast('You have been logged out due to inactivity. 🔒', 'warning');
+      }, INACTIVITY_LIMIT);
+    };
+
+    const activityEvents = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+
+    resetTimer();
+
+    activityEvents.forEach((event) => {
+      window.addEventListener(event, resetTimer);
+    });
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      activityEvents.forEach((event) => {
+        window.removeEventListener(event, resetTimer);
+      });
+    };
+  }, [user]);
 
   const handleSearch = (e) => {
     e?.preventDefault();
@@ -307,213 +338,205 @@ export default function Layout({ children }) {
         </Link>
       </nav>
 
-      {/* FLOATING CHAT BOT */}
-      <button 
-        id="cb-btn" 
-        onClick={toggleChat} 
-        title="Chat with us"
-        style={{
-          position: 'fixed',
-          bottom: '80px',
-          right: '16px',
-          zIndex: 9999,
-          width: '58px',
-          height: '58px',
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg,#1a5c38,#2d9f5a)',
-          color: '#fff',
-          border: 'none',
-          cursor: 'pointer',
-          boxShadow: '0 4px 20px rgba(26,92,56,0.4)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '1.5rem',
-          transition: 'all 0.3s'
-        }}
-      >
+      {/* FLOATING CHAT BOT & WIDGET SECTION */}
+      <style>{`
+        /* Chatbot floating button */
+        .chatbot-float-btn {
+          position: fixed; bottom: 85px; right: 16px; z-index: 9999;
+          width: 56px; height: 56px; border-radius: 50%;
+          background: linear-gradient(135deg, #1a5c38, #2d6a4f);
+          color: #fff; border: none; cursor: pointer;
+          box-shadow: 0 4px 16px rgba(26,92,56,0.3);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 1.4rem; transition: all 0.2s ease;
+        }
+        .chatbot-float-btn:active { transform: scale(0.92); }
+        .chatbot-badge {
+          position: absolute; top: -2px; right: -2px; width: 18px; height: 18px;
+          background: #e05a2b; color: #fff; border-radius: 50%; border: 2px solid #fff;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 0.65rem; font-weight: 700;
+        }
+
+        /* Widget window */
+        .chatbot-widget {
+          position: fixed; bottom: 155px; right: 16px; z-index: 10000;
+          width: 350px; border-radius: 18px; overflow: hidden;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+          display: none; flex-direction: column;
+          background: #fff; max-height: 520px;
+          border: 1px solid rgba(0,0,0,0.03);
+          font-family: 'Inter', sans-serif;
+          animation: chatSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .chatbot-widget.open { display: flex; }
+        @keyframes chatSlideUp {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        @media(max-width: 480px) {
+          .chatbot-widget {
+            width: calc(100% - 32px) !important;
+            right: 16px !important;
+            left: 16px !important;
+            bottom: 90px !important;
+            max-height: 480px !important;
+          }
+        }
+
+        /* Header */
+        .chatbot-head {
+          background: linear-gradient(135deg, #1a5c38, #2d6a4f);
+          padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+        }
+        .chatbot-avatar {
+          width: 40px; height: 40px; border-radius: 50%;
+          background: rgba(255,255,255,0.15); display: flex;
+          align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0;
+        }
+        .chatbot-name { color: #fff; font-weight: 700; font-size: 0.95rem; font-family: 'Poppins', sans-serif; }
+        .chatbot-stat { color: rgba(255,255,255,0.8); font-size: 0.72rem; display: flex; align-items: center; gap: 5px; }
+        .chatbot-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; display: inline-block; animation: chatPulse 1.5s infinite; }
+        @keyframes chatPulse {
+          0% { box-shadow: 0 0 0 0 rgba(74,222,128,0.5); }
+          70% { box-shadow: 0 0 0 6px rgba(74,222,128,0); }
+          100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); }
+        }
+        .chatbot-close {
+          margin-left: auto; background: none; border: none;
+          color: rgba(255,255,255,0.8); cursor: pointer;
+          font-size: 1.15rem; padding: 4px; transition: color 0.2s;
+        }
+        .chatbot-close:hover { color: #fff; }
+
+        /* Messages */
+        .chatbot-msgs {
+          background: #f4f6f0; flex: 1; overflow-y: auto;
+          padding: 16px; display: flex; flex-direction: column; gap: 10px;
+          min-height: 240px;
+        }
+        .chatbot-bubble {
+          max-width: 85%; border-radius: 14px; padding: 10px 14px;
+          font-size: 0.82rem; line-height: 1.45; white-space: pre-wrap;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        }
+        .chatbot-bubble.bot {
+          align-self: flex-start; background: #fff; color: #1e293b;
+          border-bottom-left-radius: 4px; border: 1px solid rgba(0,0,0,0.01);
+        }
+        .chatbot-bubble.user {
+          align-self: flex-end; background: #1a5c38; color: #fff;
+          border-bottom-right-radius: 4px;
+        }
+
+        /* Typing indicator */
+        .chatbot-typing {
+          align-self: flex-start; background: #fff; border-radius: 14px;
+          border-bottom-left-radius: 4px; padding: 12px 16px;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        }
+        .chatbot-dots { display: flex; gap: 4px; align-items: center; }
+        .chatbot-dots span {
+          width: 5px; height: 5px; background: #94a3b8; border-radius: 50%;
+          display: inline-block; animation: chatBlink 1.4s infinite both;
+        }
+        .chatbot-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .chatbot-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes chatBlink {
+          0%, 80%, 100% { opacity: 0.2; }
+          40% { opacity: 1; }
+        }
+
+        /* Quick Replies */
+        .chatbot-quick {
+          padding: 10px 14px; background: #f4f6f0;
+          display: flex; flex-wrap: wrap; gap: 6px;
+          border-top: 1px solid #e2e8f0;
+        }
+        .chatbot-qb {
+          background: #fff; border: 1.5px solid #1a5c38; color: #1a5c38;
+          padding: 6px 12px; border-radius: 20px; font-size: 0.74rem;
+          font-weight: 700; cursor: pointer; transition: all 0.2s ease;
+          outline: none; display: flex; align-items: center; gap: 4px;
+        }
+        .chatbot-qb:active { background: #e8f5ee; transform: scale(0.95); }
+
+        /* Input */
+        .chatbot-input {
+          display: flex; background: #fff; border-top: 1px solid #e2e8f0;
+          padding: 10px 12px; gap: 8px; align-items: center;
+        }
+        .chatbot-input-field {
+          flex: 1; border: 1.5px solid #cbd5e1; border-radius: 20px;
+          padding: 8px 14px; font-size: 0.84rem; outline: none;
+          font-family: 'Inter', sans-serif; transition: border-color 0.2s;
+        }
+        .chatbot-input-field:focus { border-color: #1a5c38; }
+        
+        .chatbot-send-btn {
+          width: 36px; height: 36px; border-radius: 50%;
+          background: #1a5c38; color: #fff; border: none;
+          cursor: pointer; display: flex; align-items: center;
+          justify-content: center; font-size: 0.85rem; flex-shrink: 0;
+          transition: all 0.2s; box-shadow: 0 2px 6px rgba(26,92,56,0.15);
+        }
+        .chatbot-send-btn:active { transform: scale(0.9); }
+      `}</style>
+
+      <button className="chatbot-float-btn" onClick={toggleChat} title="Chat with us">
         <i className="fas fa-comment-dots"></i>
-        {showBadge && (
-          <div id="cb-badge" style={{
-            position: 'absolute',
-            top: '-2px',
-            right: '-2px',
-            width: '20px',
-            height: '20px',
-            background: '#e05a2b',
-            borderRadius: '50%',
-            border: '2px solid #fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '0.6rem',
-            fontWeight: '700',
-            color: '#fff'
-          }}>1</div>
-        )}
+        {showBadge && <div className="chatbot-badge">1</div>}
       </button>
 
-      {/* CHATBOT DIALOG WIDGET */}
-      <div 
-        id="cb-widget" 
-        className={chatOpen ? 'open' : ''}
-        style={{
-          position: 'fixed',
-          bottom: '150px',
-          right: '16px',
-          zIndex: 10000,
-          width: '360px',
-          borderRadius: '18px',
-          overflow: 'hidden',
-          boxShadow: '0 10px 50px rgba(0,0,0,0.2)',
-          display: chatOpen ? 'flex' : 'none',
-          flexDirection: 'column',
-          fontFamily: "'Segoe UI', sans-serif",
-          maxHeight: '540px',
-          background: '#fff'
-        }}
-      >
-        <div className="cb-head" style={{
-          background: 'linear-gradient(135deg,#1a5c38,#2D6A4F)',
-          padding: '16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px'
-        }}>
-          <div className="cb-avatar" style={{
-            width: '44px',
-            height: '44px',
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.15)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '1.4rem',
-            flexShrink: 0
-          }}>🤖</div>
+      <div className={`chatbot-widget ${chatOpen ? 'open' : ''}`}>
+        <div className="chatbot-head">
+          <div className="chatbot-avatar">🤖</div>
           <div>
-            <div className="cb-name" style={{ color: '#fff', fontWeight: 700, fontSize: '1rem' }}>Curify Bot</div>
-            <div className="cb-stat" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.73rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <span className="cb-dot" style={{
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                background: '#4ade80'
-              }}></span> {isOpen ? 'Online now' : 'Always active'}
+            <div className="chatbot-name">Curify Bot</div>
+            <div className="chatbot-stat">
+              <span className="chatbot-dot"></span> Online now
             </div>
           </div>
-          <button className="cb-close" onClick={toggleChat} style={{
-            marginLeft: 'auto',
-            background: 'none',
-            border: 'none',
-            color: 'rgba(255,255,255,0.7)',
-            cursor: 'pointer',
-            fontSize: '1.2rem',
-            padding: '4px'
-          }}><i class="fas fa-times"></i></button>
+          <button className="chatbot-close" onClick={toggleChat}>
+            <i className="fas fa-times"></i>
+          </button>
         </div>
 
-        <div className="cb-msgs" id="cbMsgs" style={{
-          background: '#f0f2f5',
-          flex: 1,
-          overflowY: 'auto',
-          padding: '16px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-          minHeight: '200px'
-        }}>
+        <div className="chatbot-msgs" id="cbMsgs">
           {chatMessages.map((msg, i) => (
-            <div 
-              key={i} 
-              className={`cb-msg ${msg.sender}`} 
-              style={{
-                maxWidth: '85%',
-                borderRadius: '14px',
-                padding: '11px 14px',
-                fontSize: '0.84rem',
-                lineHeight: 1.5,
-                whiteSpace: 'pre-wrap',
-                alignSelf: msg.sender === 'bot' ? 'flex-start' : 'flex-end',
-                background: msg.sender === 'bot' ? '#fff' : '#1a5c38',
-                color: msg.sender === 'bot' ? '#111' : '#fff',
-                borderBottomLeftRadius: msg.sender === 'bot' ? '4px' : '14px',
-                borderBottomRightRadius: msg.sender === 'bot' ? '14px' : '4px',
-                boxShadow: msg.sender === 'bot' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none'
-              }}
-            >
+            <div key={i} className={`chatbot-bubble ${msg.sender}`}>
               {msg.text}
             </div>
           ))}
           {isTyping && (
-            <div className="cb-msg bot typing" style={{
-              alignSelf: 'flex-start',
-              background: '#fff',
-              borderRadius: '14px',
-              borderBottomLeftRadius: '4px',
-              padding: '14px 18px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
-            }}>
-              <div className="cb-dots" style={{ display: 'flex', gap: '5px' }}>
-                <span className="dot-blink-1"></span>
-                <span className="dot-blink-2"></span>
-                <span className="dot-blink-3"></span>
+            <div className="chatbot-typing">
+              <div className="chatbot-dots">
+                <span></span>
+                <span></span>
+                <span></span>
               </div>
             </div>
           )}
           <div ref={msgsEndRef} />
         </div>
 
-        <div className="cb-quick" style={{
-          padding: '10px 14px',
-          background: '#f0f2f5',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '7px',
-          borderTop: '1px solid #e2e8f0'
-        }}>
-          <button className="cb-qb" onClick={() => handleQuickChat('track')}>📦 Track Order</button>
-          <button className="cb-qb" onClick={() => handleQuickChat('delivery')}>🚚 Delivery</button>
-          <button className="cb-qb" onClick={() => handleQuickChat('returns')}>↩️ Returns</button>
-          <button className="cb-qb" onClick={() => handleQuickChat('payment')}>💳 Payment</button>
-          <button className="cb-qb" onClick={() => handleQuickChat('hours')}>🕐 Hours</button>
+        <div className="chatbot-quick">
+          <button className="chatbot-qb" onClick={() => handleQuickChat('track')}>📦 Track Order</button>
+          <button className="chatbot-qb" onClick={() => handleQuickChat('delivery')}>🚚 Delivery</button>
+          <button className="chatbot-qb" onClick={() => handleQuickChat('returns')}>↩️ Returns</button>
+          <button className="chatbot-qb" onClick={() => handleQuickChat('payment')}>💳 Payment</button>
+          <button className="chatbot-qb" onClick={() => handleQuickChat('hours')}>🕐 Hours</button>
         </div>
 
-        <div className="cb-input" style={{
-          display: 'flex',
-          background: '#fff',
-          borderTop: '1px solid #e2e8f0',
-          padding: '10px 12px',
-          gap: '8px'
-        }}>
+        <div className="chatbot-input">
           <input 
+            className="chatbot-input-field"
             placeholder="Ask me anything..." 
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSendChat()}
-            style={{
-              flex: 1,
-              border: '1.5px solid #e2e8f0',
-              borderRadius: '22px',
-              padding: '10px 16px',
-              fontSize: '0.85rem',
-              outline: 'none'
-            }}
           />
-          <button onClick={handleSendChat} style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '50%',
-            background: '#1a5c38',
-            color: '#fff',
-            border: 'none',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '0.9rem',
-            flexShrink: 0
-          }}>
+          <button className="chatbot-send-btn" onClick={handleSendChat}>
             <i className="fas fa-paper-plane"></i>
           </button>
         </div>

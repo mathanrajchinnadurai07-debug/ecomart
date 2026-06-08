@@ -1,12 +1,36 @@
 import Razorpay from 'razorpay';
+import { checkRateLimit } from '../../middleware/rate-limiter';
+import { sanitizeAmount, sanitizeString } from '../../middleware/sanitize';
+import { verifyAuth } from '../../middleware/auth';
 
 export default async function handler(req, res) {
+  // Set security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none';");
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Rate Limiting Check
+  if (checkRateLimit(req, res)) {
+    return;
+  }
+
+  // Authorization Check
+  const authenticatedUser = verifyAuth(req);
+  if (!authenticatedUser) {
+    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+  }
+
   try {
-    const { amount, currency = 'INR', receipt } = req.body;
+    let { amount, currency = 'INR', receipt } = req.body;
+
+    // Sanitize inputs
+    amount = sanitizeAmount(amount);
+    currency = sanitizeString(currency, 10) || 'INR';
+    receipt = sanitizeString(receipt, 100);
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'Invalid amount' });

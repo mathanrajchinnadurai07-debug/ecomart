@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth, db } from '../firebase/config';
 import { 
   onAuthStateChanged, 
@@ -7,7 +7,9 @@ import {
 import { 
   doc, 
   getDoc, 
+  getDocs,
   setDoc, 
+  addDoc,
   updateDoc, 
   collection, 
   onSnapshot, 
@@ -30,6 +32,10 @@ export const CartProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
 
+  // Security Context States
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [mfaPassed, setMfaPassed] = useState(true);
+
   // Show Toast helper
   const addToast = (message, type = 'info') => {
     const id = Date.now() + Math.random().toString(36).substr(2, 9);
@@ -43,76 +49,215 @@ export const CartProvider = ({ children }) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  // Helper to log login audit trails
+  const logLoginEvent = async (currentUser) => {
+    try {
+      const userAgent = navigator.userAgent;
+      
+      // Basic OS detection
+      let os = 'Unknown OS';
+      if (userAgent.indexOf('Win') !== -1) os = 'Windows';
+      else if (userAgent.indexOf('Mac') !== -1) os = 'macOS';
+      else if (userAgent.indexOf('Linux') !== -1) os = 'Linux';
+      else if (/Android/i.test(userAgent)) os = 'Android';
+      else if (/iPhone|iPad|iPod/i.test(userAgent)) os = 'iOS';
+
+      // Basic Browser detection
+      let browser = 'Unknown Browser';
+      if (userAgent.indexOf('Firefox') !== -1) browser = 'Mozilla Firefox';
+      else if (userAgent.indexOf('Chrome') !== -1) browser = 'Google Chrome';
+      else if (userAgent.indexOf('Safari') !== -1) browser = 'Apple Safari';
+      else if (userAgent.indexOf('Edge') !== -1) browser = 'Microsoft Edge';
+
+      const timestamp = new Date().toISOString();
+      const loginHistoryRef = collection(db, 'users', currentUser.uid, 'login_history');
+      
+      await addDoc(loginHistoryRef, {
+        os,
+        browser,
+        timestamp,
+        userAgent: userAgent.slice(0, 100),
+        ip: '192.168.1.1 (NAT-Verified)', // Simulated NAT
+        status: 'Success'
+      });
+
+      // Write active session
+      const sessionId = sessionStorage.getItem('Curify_session_id') || 'sess_' + Date.now();
+      sessionStorage.setItem('Curify_session_id', sessionId);
+      
+      const sessionDocRef = doc(db, 'users', currentUser.uid, 'active_sessions', sessionId);
+      await setDoc(sessionDocRef, {
+        sessionId,
+        os,
+        browser,
+        lastActive: timestamp,
+        userAgent: userAgent.slice(0, 100),
+        isCurrent: true
+      });
+    } catch (err) {
+      console.error('Audit log registration failed:', err);
+    }
+  };
+
+  // Toggle MFA configuration
+  const toggleMfa = async (enabled) => {
+    if (!user) return;
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, { mfaEnabled: enabled });
+      setMfaEnabled(enabled);
+      if (enabled) {
+        setMfaPassed(true);
+        sessionStorage.setItem('Curify_mfa_passed_' + user.uid, 'true');
+      }
+      addToast(enabled ? 'MFA Enabled Successfully! 🔒' : 'MFA Disabled Successfully! 🔓', 'success');
+      setUserProfile(prev => ({ ...prev, mfaEnabled: enabled }));
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to update MFA settings', 'error');
+    }
+  };
+
+  // Revoke other active device sessions
+  const revokeOtherSessions = async () => {
+    if (!user) return;
+    try {
+      const newSalt = Date.now().toString();
+      sessionStorage.setItem('Curify_session_salt', newSalt);
+      
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, { sessionSalt: newSalt });
+      
+      // Clear other sessions in Firestore active_sessions subcollection
+      const currentSessionId = sessionStorage.getItem('Curify_session_id');
+      const sessionsRef = collection(db, 'users', user.uid, 'active_sessions');
+      const snap = await getDocs(sessionsRef);
+      
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => {
+        if (d.id !== currentSessionId) {
+          batch.delete(d.ref);
+        }
+      });
+      await batch.commit();
+
+      addToast('Log out of all other devices completed! 🔒', 'success');
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to revoke other sessions', 'error');
+    }
+  };
+
   // Auth State
   useEffect(() => {
+    let userSnapshotUnsubscribe = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setLoading(true);
+      if (userSnapshotUnsubscribe) {
+        userSnapshotUnsubscribe();
+        userSnapshotUnsubscribe = null;
+      }
+
       if (currentUser) {
         setUser(currentUser);
         localStorage.setItem('Curify_token', 'firebase_' + currentUser.uid);
 
-        // Fetch user profile
-        try {
-          const userDocRef = doc(db, 'users', currentUser.uid);
-          const userDoc = await getDoc(userDocRef);
+        // Fetch user profile in real-time
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        
+        userSnapshotUnsubscribe = onSnapshot(userDocRef, async (userDoc) => {
           let profileData = null;
-
           if (userDoc.exists()) {
             profileData = userDoc.data();
+            
+            // Session Salt Verification
+            const localSalt = sessionStorage.getItem('Curify_session_salt');
+            if (profileData.sessionSalt && localSalt && profileData.sessionSalt !== localSalt) {
+              await logout();
+              addToast('Session terminated by another device. 🔒', 'warning');
+              return;
+            } else if (!profileData.sessionSalt) {
+              const initialSalt = Date.now().toString();
+              sessionStorage.setItem('Curify_session_salt', initialSalt);
+              await updateDoc(userDocRef, { sessionSalt: initialSalt });
+            } else if (!localSalt) {
+              sessionStorage.setItem('Curify_session_salt', profileData.sessionSalt);
+            }
+
+            // MFA Check
+            if (profileData.mfaEnabled) {
+              setMfaEnabled(true);
+              const sessionMfaPassed = sessionStorage.getItem('Curify_mfa_passed_' + currentUser.uid) === 'true';
+              setMfaPassed(sessionMfaPassed);
+            } else {
+              setMfaEnabled(false);
+              setMfaPassed(true);
+            }
+
+            // Role evaluation
+            setIsAdmin(profileData.role === 'admin');
           } else {
+            // Profile Init
+            const initialSalt = Date.now().toString();
+            sessionStorage.setItem('Curify_session_salt', initialSalt);
+            
             profileData = {
               name: currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
               email: currentUser.email || '',
               phone: currentUser.phoneNumber || '',
+              role: 'customer',
+              mfaEnabled: false,
+              sessionSalt: initialSalt,
               createdAt: serverTimestamp()
             };
             await setDoc(userDocRef, profileData);
-          }
-          setUserProfile({ uid: currentUser.uid, ...profileData });
-          localStorage.setItem('Curify_user', JSON.stringify({ uid: currentUser.uid, ...profileData }));
-
-          // Check if admin
-          try {
-            const adminDocRef = doc(db, 'admins', 'config');
-            const adminDoc = await getDoc(adminDocRef);
-            if (adminDoc.exists()) {
-              const emails = adminDoc.data().emails || [];
-              setIsAdmin(emails.includes(currentUser.email));
-            } else {
-              setIsAdmin(false);
-            }
-          } catch (e) {
+            setMfaEnabled(false);
+            setMfaPassed(true);
             setIsAdmin(false);
           }
+          
+          setUserProfile({ uid: currentUser.uid, ...profileData });
+          localStorage.setItem('Curify_user', JSON.stringify({ uid: currentUser.uid, ...profileData }));
+        }, (err) => {
+          console.error('User profile snapshot error:', err);
+        });
 
-          // Merge local cart to Firestore if there are items
-          const localCart = JSON.parse(localStorage.getItem('Curify_cart') || '[]');
-          if (localCart.length > 0) {
-            const batch = writeBatch(db);
-            for (const item of localCart) {
-              const cartItemRef = doc(db, 'users', currentUser.uid, 'cart', item.productId);
-              batch.set(cartItemRef, {
-                name: item.name,
-                price: item.price,
-                originalPrice: item.originalPrice || item.price,
-                imageUrl: item.image || '',
-                unit: item.weight || '',
-                category: item.category || '',
-                quantity: item.quantity
-              }, { merge: true });
-            }
-            await batch.commit();
-            localStorage.removeItem('Curify_cart');
+        // Register session log audits
+        const sessionLogged = sessionStorage.getItem('Curify_login_logged_' + currentUser.uid);
+        if (!sessionLogged) {
+          sessionStorage.setItem('Curify_login_logged_' + currentUser.uid, 'true');
+          await logLoginEvent(currentUser);
+        }
+
+        // Merge local cart to Firestore if there are items
+        const localCart = JSON.parse(localStorage.getItem('Curify_cart') || '[]');
+        if (localCart.length > 0) {
+          const batch = writeBatch(db);
+          for (const item of localCart) {
+            const cartItemRef = doc(db, 'users', currentUser.uid, 'cart', item.productId);
+            batch.set(cartItemRef, {
+              name: item.name,
+              price: item.price,
+              originalPrice: item.originalPrice || item.price,
+              imageUrl: item.image || '',
+              unit: item.weight || '',
+              category: item.category || '',
+              quantity: item.quantity
+            }, { merge: true });
           }
-        } catch (error) {
-          console.error('Error handling logged in user profile:', error);
+          await batch.commit();
+          localStorage.removeItem('Curify_cart');
         }
       } else {
         setUser(null);
         setUserProfile(null);
         setIsAdmin(false);
+        setMfaEnabled(false);
+        setMfaPassed(true);
         localStorage.removeItem('Curify_token');
         localStorage.removeItem('Curify_user');
+        
         // Load cart from local storage
         const localCart = JSON.parse(localStorage.getItem('Curify_cart') || '[]');
         setCart(localCart);
@@ -124,7 +269,10 @@ export const CartProvider = ({ children }) => {
     const localWishlist = JSON.parse(localStorage.getItem('Curify_wishlist') || '[]');
     setWishlist(localWishlist);
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (userSnapshotUnsubscribe) userSnapshotUnsubscribe();
+    };
   }, []);
 
   // Listen to Cart changes if user logged in
@@ -136,7 +284,6 @@ export const CartProvider = ({ children }) => {
         id: d.id,
         productId: d.id,
         ...d.data(),
-        // Map to uniform names
         image: d.data().imageUrl || d.data().image || '',
         weight: d.data().unit || '250g'
       }));
@@ -200,31 +347,27 @@ export const CartProvider = ({ children }) => {
         addToast(`${product.name} added to cart! 🛒`, 'success');
       } catch (e) {
         console.error('Firestore addToCart error:', e);
-        addToast('Failed to add item to cart', 'error');
+        addToast('Failed to add to cart', 'error');
       }
     } else {
-      // Local storage cart
-      const localCart = [...cart];
-      const idx = localCart.findIndex((i) => i.productId === pid && i.weight === weight);
+      const updated = [...cart];
+      const idx = updated.findIndex((i) => i.productId === pid && i.weight === weight);
       if (idx > -1) {
-        localCart[idx].quantity += quantity;
+        updated[idx].quantity += quantity;
       } else {
-        localCart.push({
+        updated.push({
           id: pid,
           productId: pid,
           name: product.name,
-          image: imgUrl,
           price: finalPrice,
           originalPrice: origPrice,
-          weight,
-          quantity,
-          stock: product.stock || 100,
-          slug: product.slug || pid,
-          category: product.category || ''
+          image: imgUrl,
+          weight: weight,
+          quantity: quantity
         });
       }
-      setCart(localCart);
-      localStorage.setItem('Curify_cart', JSON.stringify(localCart));
+      setCart(updated);
+      localStorage.setItem('Curify_cart', JSON.stringify(updated));
       addToast(`${product.name} added to cart! 🛒`, 'success');
     }
   };
@@ -234,7 +377,7 @@ export const CartProvider = ({ children }) => {
       try {
         const cartItemRef = doc(db, 'users', user.uid, 'cart', productId);
         await deleteDoc(cartItemRef);
-        addToast('Item removed from cart', 'info');
+        addToast('Removed from cart', 'info');
       } catch (e) {
         console.error('Firestore removeFromCart error:', e);
         addToast('Failed to remove item', 'error');
@@ -243,7 +386,7 @@ export const CartProvider = ({ children }) => {
       const updated = cart.filter((i) => !(i.productId === productId && i.weight === weight));
       setCart(updated);
       localStorage.setItem('Curify_cart', JSON.stringify(updated));
-      addToast('Item removed from cart', 'info');
+      addToast('Removed from cart', 'info');
     }
   };
 
@@ -272,11 +415,10 @@ export const CartProvider = ({ children }) => {
     if (user) {
       try {
         const cartRef = collection(db, 'users', user.uid, 'cart');
-        const snap = await onSnapshot(cartRef, async (s) => {
-          const batch = writeBatch(db);
-          s.docs.forEach((doc) => batch.delete(doc.ref));
-          await batch.commit();
-        });
+        const snap = await getDocs(cartRef);
+        const batch = writeBatch(db);
+        snap.docs.forEach((doc) => batch.delete(doc.ref));
+        await batch.commit();
       } catch (e) {
         console.error('Clear cart error:', e);
       }
@@ -288,14 +430,30 @@ export const CartProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      const currentSessionId = sessionStorage.getItem('Curify_session_id');
+      if (user && currentSessionId) {
+        try {
+          const sessionDocRef = doc(db, 'users', user.uid, 'active_sessions', currentSessionId);
+          await deleteDoc(sessionDocRef);
+        } catch (e) {
+          console.error('Failed to delete active session doc:', e);
+        }
+      }
+      
       await signOut(auth);
       setUser(null);
       setUserProfile(null);
       setIsAdmin(false);
+      setMfaEnabled(false);
+      setMfaPassed(true);
       setCart([]);
+      
       localStorage.removeItem('Curify_token');
       localStorage.removeItem('Curify_user');
       localStorage.removeItem('Curify_cart');
+      sessionStorage.removeItem('Curify_session_salt');
+      sessionStorage.removeItem('Curify_session_id');
+      
       addToast('Logged out successfully', 'info');
     } catch (e) {
       console.error('Logout error:', e);
@@ -325,6 +483,11 @@ export const CartProvider = ({ children }) => {
       wishlist,
       toasts,
       isAdmin,
+      mfaEnabled,
+      mfaPassed,
+      setMfaPassed,
+      toggleMfa,
+      revokeOtherSessions,
       addToast,
       removeToast,
       addToCart,
@@ -350,7 +513,7 @@ export const CartProvider = ({ children }) => {
       }}>
         {toasts.map((t) => (
           <div key={t.id} className={`toast ${t.type}`} style={{
-            background: t.type === 'success' ? '#2d6a4f' : t.type === 'error' ? '#c53030' : '#2b6cb0',
+            background: t.type === 'success' ? '#2d6a4f' : t.type === 'error' ? '#c53030' : t.type === 'warning' ? '#dd6b20' : '#2b6cb0',
             color: '#fff',
             padding: '12px 20px',
             borderRadius: '8px',

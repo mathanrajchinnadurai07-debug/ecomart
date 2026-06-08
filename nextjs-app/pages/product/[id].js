@@ -15,8 +15,7 @@ export default function ProductDetail() {
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState('description');
   const [mainImage, setMainImage] = useState('');
-  
-  // No review states — brand policy: trust badges only
+  const [localReviews, setLocalReviews] = useState([]);
 
   // Fetch product from data
   useEffect(() => {
@@ -62,7 +61,7 @@ export default function ProductDetail() {
         ],
         nutritionalInfo: { calories: 'Varies', protein: 'Varies', carbs: 'Varies', fat: 'Varies', fiber: 'Varies' },
         farmSource: { farmName: 'Organic Farm Partner', location: 'India', description: 'Certified organic farm.' },
-        deliveryInfo: 'Delivered within 2-4 business days. Free delivery above ₹500.',
+        deliveryInfo: 'Delivered within 2-4 business days. Free delivery above ₹499.',
         returnPolicy: '7-day return policy with full refund or replacement.',
         reviews: [],
         videoUrl: ''
@@ -78,7 +77,7 @@ export default function ProductDetail() {
     setMainImage(found.images?.[0] || found.image || '');
 
     // Load any reviews saved in local storage for this product
-    const saved = JSON.parse(localStorage.getItem('curfee_reviews') || '[]');
+    const saved = JSON.parse(localStorage.getItem('curify_reviews') || '[]');
     const filtered = saved.filter(r => r.productSlug === slug);
     setLocalReviews(filtered);
 
@@ -126,90 +125,210 @@ export default function ProductDetail() {
     router.push('/cart');
   };
 
-
-
-
   // Get related products (same category, up to 4, excluding current product)
   const relatedProducts = ALL_PRODUCTS
     .filter(p => p.category === product.category && p.slug !== product.slug)
     .slice(0, 4);
 
   return (
-    <>
-      <div className="topbar">
-        <div className="container">
-          <div>
-            <i className="fas fa-phone-alt"></i> +91 78457 44038 | <Link href="/support">Help</Link>
-          </div>
-          <div>
-            <Link href="/products?bestseller=true"><i className="fas fa-percent"></i> Special Offers</Link>
-          </div>
+    <div className="pd-pg">
+      <style>{`
+        .pd-pg { background: #f4f6f0; min-height: 100vh; padding-bottom: 80px; font-family: 'Inter', sans-serif; }
+        
+        /* Breadcrumbs */
+        .pd-breadcrumbs { padding: 16px 12px 8px; font-size: 0.8rem; color: #64748b; font-weight: 500; }
+        .pd-breadcrumbs a { color: #1a5c38; text-decoration: none; font-weight: 600; }
+        .pd-breadcrumbs span { color: #94a3b8; margin: 0 4px; }
+
+        /* Main detail layout */
+        .pd-container { max-width: 960px; margin: 0 auto; padding: 0 12px; }
+        .pd-grid { display: grid; grid-template-columns: 1fr; gap: 24px; margin-bottom: 32px; }
+        @media(min-width: 768px) {
+          .pd-grid { grid-template-columns: 1fr 1fr; gap: 40px; }
+        }
+
+        /* Image Gallery */
+        .pd-gallery { display: flex; flex-direction: column; gap: 12px; }
+        .pd-main-img-box {
+          background: #fff; border-radius: 20px; border: 1px solid rgba(0,0,0,0.02);
+          box-shadow: 0 4px 16px rgba(0,0,0,0.03); height: 350px;
+          display: flex; align-items: center; justify-content: center;
+          position: relative; overflow: hidden;
+        }
+        .pd-main-img-box img { width: 100%; height: 100%; object-fit: contain; padding: 24px; }
+        
+        .pd-wishlist-btn {
+          position: absolute; top: 16px; right: 16px; width: 42px; height: 42px;
+          border-radius: 50%; background: #fff; border: none; cursor: pointer;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.08); display: flex;
+          align-items: center; justify-content: center; font-size: 1.25rem;
+          transition: all 0.2s; z-index: 10;
+        }
+        .pd-wishlist-btn:active { transform: scale(0.9); }
+        .pd-wishlist-btn.active i { color: #ef4444; }
+        
+        .pd-rating-tag {
+          position: absolute; bottom: 16px; left: 16px; background: rgba(255,255,255,0.92);
+          backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+          padding: 6px 12px; border-radius: 20px; font-size: 0.76rem;
+          font-weight: 700; color: #1a5c38; display: flex; align-items: center; gap: 4px;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.05); z-index: 10;
+        }
+
+        .pd-thumb-list { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+        .pd-thumb {
+          width: 64px; height: 64px; border-radius: 10px; background: #fff;
+          border: 1.5px solid #cbd5e1; display: flex; align-items: center;
+          justify-content: center; cursor: pointer; overflow: hidden;
+          transition: all 0.2s; flex-shrink: 0;
+        }
+        .pd-thumb.active { border-color: #1a5c38; box-shadow: 0 0 0 3px rgba(26,92,56,0.1); }
+        .pd-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 6px; }
+
+        /* Product details info styling */
+        .pd-info { display: flex; flex-direction: column; }
+        .pd-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+        .pd-badge {
+          background: #e8f5ee; color: #1a5c38; padding: 4px 10px;
+          border-radius: 6px; font-size: 0.68rem; font-weight: 700;
+          text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .pd-badge.sale { background: #ffece6; color: #e05a2b; }
+        .pd-badge.out { background: #fee2e2; color: #ef4444; }
+
+        .pd-title { font-size: 1.6rem; font-weight: 800; color: #1a5c38; font-family: 'Poppins', sans-serif; margin-bottom: 8px; line-height: 1.25; }
+        .pd-desc { font-size: 0.88rem; color: #475569; line-height: 1.55; margin-bottom: 18px; }
+
+        /* Price block */
+        .pd-price-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 20px; }
+        .pd-price { font-size: 1.8rem; font-weight: 800; color: #1a5c38; font-family: 'Poppins', sans-serif; }
+        .pd-price-original { font-size: 1.1rem; text-decoration: line-through; color: #94a3b8; }
+        .pd-discount-percent { font-size: 0.85rem; font-weight: 700; color: #e05a2b; }
+
+        /* Weight Switcher options */
+        .pd-section-label { font-size: 0.74rem; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block; }
+        .pd-weight-options { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+        .pd-weight-option {
+          background: #fff; border: 1.5px solid #cbd5e1; border-radius: 20px;
+          padding: 8px 16px; font-size: 0.82rem; font-weight: 700; color: #475569;
+          cursor: pointer; transition: all 0.2s;
+        }
+        .pd-weight-option.active {
+          border-color: #1a5c38; color: #1a5c38; background: #e8f5ee;
+          box-shadow: 0 2px 6px rgba(26,92,56,0.1);
+        }
+
+        /* Qty Counter controls */
+        .pd-qty-stock-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .pd-qty-ctrl { display: flex; align-items: center; background: #fff; border: 1.5px solid #cbd5e1; border-radius: 8px; overflow: hidden; max-width: fit-content; }
+        .pd-qty-btn { background: none; border: none; padding: 6px 14px; font-size: 1.1rem; font-weight: 700; color: #1a5c38; cursor: pointer; }
+        .pd-qty-num { width: 30px; text-align: center; font-size: 0.88rem; font-weight: 700; color: #111; outline: none; border: none; }
+        
+        .pd-stock-tag { font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+        .pd-stock-tag.in { color: #15803d; }
+        .pd-stock-tag.out { color: #b91c1c; }
+
+        /* Action Buttons */
+        .pd-actions { display: flex; gap: 12px; margin-bottom: 24px; }
+        .pd-btn {
+          flex: 1; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700;
+          cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+          transition: all 0.2s; border: none;
+        }
+        .pd-btn.outline { background: #fff; border: 1.5px solid #1a5c38; color: #1a5c38; }
+        .pd-btn.outline:active { background: #f0faf5; }
+        .pd-btn.primary { background: linear-gradient(135deg, #1a5c38, #2d6a4f); color: #fff; box-shadow: 0 4px 12px rgba(26,92,56,0.2); }
+        .pd-btn.primary:active { transform: scale(0.98); }
+        .pd-btn.buy { background: linear-gradient(135deg, #e05a2b, #f77f00); color: #fff; box-shadow: 0 4px 12px rgba(224,90,43,0.2); }
+        .pd-btn.buy:active { transform: scale(0.98); }
+
+        /* Trust Badges Strip */
+        .pd-trust-grid {
+          display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+          background: #fff; padding: 16px; border-radius: 14px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.02); margin-bottom: 28px;
+          border: 1px solid rgba(0,0,0,0.01);
+        }
+        .pd-trust-item { display: flex; align-items: center; gap: 8px; font-size: 0.74rem; font-weight: 600; color: #475569; }
+        .pd-trust-item i { color: #1a5c38; font-size: 0.9rem; }
+
+        /* Tab Switcher rules */
+        .pd-tabs-container { margin-bottom: 32px; }
+        .pd-tabs-list {
+          display: flex; gap: 8px; border-bottom: 1.5px solid #cbd5e1;
+          margin-bottom: 20px; overflow-x: auto; padding-bottom: 6px;
+        }
+        .pd-tab-btn {
+          background: none; border: none; padding: 8px 16px; font-size: 0.85rem;
+          font-weight: 700; color: #64748b; cursor: pointer; transition: all 0.2s;
+          white-space: nowrap; border-bottom: 2.5px solid transparent;
+          margin-bottom: -7.5px; font-family: 'Poppins', sans-serif;
+        }
+        .pd-tab-btn.active { color: #1a5c38; border-color: #1a5c38; }
+
+        .pd-tab-content { background: #fff; border-radius: 16px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.01); }
+
+        /* Nutrition details */
+        .pd-nutrition-table { width: 100%; border-collapse: collapse; max-width: 480px; }
+        .pd-nutrition-table tr { border-bottom: 1px dashed #e2e8f0; }
+        .pd-nutrition-table tr:last-child { border-bottom: none; }
+        .pd-nutrition-table td { padding: 10px 8px; font-size: 0.85rem; color: #475569; }
+        .pd-nutrition-table td strong { color: #1a5c38; }
+
+        /* Related Products details */
+        .pd-related-sec-title { font-size: 1.15rem; font-weight: 800; color: #1a5c38; font-family: 'Poppins', sans-serif; margin-bottom: 16px; padding-left: 4px; }
+      `}</style>
+
+      {/* Breadcrumbs */}
+      <div className="pd-breadcrumbs">
+        <div className="pd-container">
+          <Link href="/">Home</Link>
+          <span>/</span>
+          <Link href="/products">Products</Link>
+          <span>/</span>
+          <span style={{ color: '#475569' }}>{product.name}</span>
         </div>
       </div>
 
-      <div className="container product-detail">
-        {/* Breadcrumbs */}
-        <div style={{ padding: '16px 0', fontSize: '0.85rem', color: 'var(--text-light)' }}>
-          <Link href="/" style={{ color: 'var(--primary)' }}>Home</Link> /{' '}
-          <Link href="/products" style={{ color: 'var(--primary)' }}>Products</Link> /{' '}
-          <span>{product.name}</span>
-        </div>
-
+      <div className="pd-container">
+        
         {/* Product Detail Grid Layout */}
-        <div className="product-detail-grid" id="detailContent" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', marginBottom: '40px' }}>
+        <div className="pd-grid">
           
           {/* Photo Gallery Column */}
-          <div className="product-gallery" style={{ position: 'relative' }}>
-            <div className="main-image" style={{ background: '#f8fafc', position: 'relative', height: '360px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '12px', border: '1px solid var(--border)' }}>
-              
+          <div className="pd-gallery">
+            <div className="pd-main-img-box">
               <button 
-                className={`btn-icon ${isWishlisted ? 'active' : ''}`} 
+                className={`pd-wishlist-btn ${isWishlisted ? 'active' : ''}`} 
                 onClick={() => toggleWishlist(pid)}
-                style={{ position: 'absolute', top: '16px', right: '16px', background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', borderRadius: '50%', width: '40px', height: '40px', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer' }}
+                title="Add to Wishlist"
               >
-                <i className="fas fa-heart" style={{ color: isWishlisted ? 'var(--danger)' : '#a0aec0' }}></i>
+                <i className="fas fa-heart"></i>
               </button>
 
               {mainImage ? (
-                <img 
-                  id="mainDetailImage" 
-                  src={mainImage} 
-                  alt={product.name} 
-                  style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '20px' }} 
-                />
+                <img src={mainImage} alt={product.name} />
               ) : (
                 <div style={{ fontSize: '8rem' }}>🌿</div>
               )}
 
-              <div style={{ position: 'absolute', bottom: '16px', left: '16px', background: '#fff', padding: '4px 12px', borderRadius: '16px', fontSize: '0.75rem', fontWeight: '700', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', zIndex: 10 }}>
-                {product.rating} <i className="fas fa-star" style={{ color: 'var(--success)' }}></i> 
-                <span style={{ color: '#d1d5db', margin: '0 6px' }}>|</span> 
+              <div className="pd-rating-tag">
+                {product.rating} <i className="fas fa-star" style={{ color: '#f59e0b' }}></i> 
+                <span style={{ color: '#cbd5e1', margin: '0 4px' }}>|</span> 
                 {product.numReviews + localReviews.length} reviews
               </div>
             </div>
 
             {/* Gallery Thumbnails List */}
             {product.images && product.images.length > 1 && (
-              <div className="thumb-list" style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+              <div className="pd-thumb-list">
                 {product.images.map((img, i) => (
                   <div 
                     key={i}
-                    className={`thumb ${mainImage === img ? 'active' : ''}`} 
+                    className={`pd-thumb ${mainImage === img ? 'active' : ''}`} 
                     onClick={() => setMainImage(img)}
-                    style={{
-                      width: '60px',
-                      height: '60px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: '#fff',
-                      border: mainImage === img ? '2px solid var(--primary)' : '1px solid #e2e8f0',
-                      borderRadius: '6px',
-                      overflow: 'hidden',
-                      cursor: 'pointer'
-                    }}
                   >
-                    <img src={img} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="thumb" />
+                    <img src={img} alt={`${product.name} view ${i + 1}`} />
                   </div>
                 ))}
               </div>
@@ -217,40 +336,38 @@ export default function ProductDetail() {
           </div>
 
           {/* Product Detail Info Column */}
-          <div className="detail-info">
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
-              <span className="badge" style={{ background: 'var(--primary)', color: '#fff' }}>{product.category}</span>
-              {discount > 0 && <span className="badge badge-sale">{discount}% OFF</span>}
-              {outOfStock && <span className="badge" style={{ background: 'var(--danger)', color: '#fff' }}>Out of Stock</span>}
+          <div className="pd-info">
+            <div className="pd-badges">
+              <span className="pd-badge">{product.category}</span>
+              {discount > 0 && <span className="pd-badge sale">{discount}% OFF</span>}
+              {outOfStock && <span className="pd-badge out">Out of Stock</span>}
             </div>
 
-            <h1 className="detail-title" style={{ fontSize: '1.75rem', fontWeight: '700', marginBottom: '8px', lineHeight: 1.3 }}>
-              {product.name}
-            </h1>
+            <h1 className="pd-title">{product.name}</h1>
             
-            <p style={{ color: 'var(--text-light)', fontSize: '0.9rem', marginBottom: '16px', lineHeight: 1.6 }}>
-              {product.description || 'Premium organic product from certified farms.'}
+            <p className="pd-desc">
+              {product.description || 'Premium organic food product sourced directly from certified sustainable farms.'}
             </p>
 
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '16px' }}>
-              <span className="detail-price" style={{ fontSize: '1.6rem', fontWeight: '800' }}>₹{showPrice}</span>
+            <div className="pd-price-row">
+              <span className="pd-price">₹{showPrice}</span>
               {discount > 0 && (
                 <>
-                  <span className="detail-original" style={{ textDecoration: 'line-through', color: 'var(--text-light)', fontSize: '1rem' }}>₹{showOriginal}</span>
-                  <span className="detail-discount" style={{ color: 'var(--success)', fontWeight: '700', fontSize: '0.85rem' }}>{discount}% off</span>
+                  <span className="pd-price-original">₹{showOriginal}</span>
+                  <span className="pd-discount-percent">({discount}% off)</span>
                 </>
               )}
             </div>
 
             {/* Weight Switcher options */}
             {product.weights && product.weights.length > 0 && (
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ fontWeight: '600', fontSize: '0.85rem', marginBottom: '8px', display: 'block' }}>Weight / Pack Size:</label>
-                <div className="weight-options" id="detailWeights">
+              <div style={{ marginBottom: '18px' }}>
+                <span className="pd-section-label">Weight / Pack Size</span>
+                <div className="pd-weight-options">
                   {product.weights.map((w) => (
                     <span 
                       key={w.label}
-                      className={`weight-option ${selectedWeight === w.label ? 'active' : ''}`} 
+                      className={`pd-weight-option ${selectedWeight === w.label ? 'active' : ''}`} 
                       onClick={() => setSelectedWeight(w.label)}
                     >
                       {w.label}
@@ -260,240 +377,241 @@ export default function ProductDetail() {
               </div>
             )}
 
-            {/* Quantity Counter control */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <label style={{ fontWeight: '600', fontSize: '0.85rem' }}>Qty:</label>
-                <div className="quantity-control" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
-                  <button onClick={() => handleQtyChange(-1)} style={{ border: 'none', background: 'none', padding: '5px 12px', fontWeight: '700' }}>−</button>
+            {/* Quantity Selector and Stock Status */}
+            <div className="pd-qty-stock-row">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span className="pd-section-label" style={{ marginBottom: 0 }}>Qty</span>
+                <div className="pd-qty-ctrl">
+                  <button className="pd-qty-btn" onClick={() => handleQtyChange(-1)}>−</button>
                   <input 
                     type="number" 
+                    className="pd-qty-num"
                     value={quantity} 
                     readOnly
-                    style={{ background: 'transparent', width: '30px', fontSize: '0.9rem', textAlign: 'center', border: 'none', outline: 'none' }} 
                   />
-                  <button onClick={() => handleQtyChange(1)} style={{ border: 'none', background: 'none', padding: '5px 12px', fontWeight: '700' }}>+</button>
+                  <button className="pd-qty-btn" onClick={() => handleQtyChange(1)}>+</button>
                 </div>
               </div>
-              <span className={`product-stock ${outOfStock ? 'out-of-stock' : 'in-stock'}`} style={{ fontWeight: '600', fontSize: '0.8rem' }}>
+              <span className={`pd-stock-tag ${outOfStock ? 'out' : 'in'}`}>
                 <i className={`fas ${outOfStock ? 'fa-times-circle' : 'fa-check-circle'}`}></i> {outOfStock ? 'Out of Stock' : 'In Stock'}
               </span>
             </div>
 
             {/* Detail action buttons */}
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+            <div className="pd-actions">
               {outOfStock ? (
-                <button className="btn btn-lg" disabled style={{ flex: 1, opacity: 0.5, background: 'var(--text-light)', color: '#fff', border: 'none', textAlign: 'center', width: '100%' }}>
+                <button className="pd-btn" disabled style={{ background: '#cbd5e1', color: '#64748b', cursor: 'not-allowed', width: '100%' }}>
                   Out of Stock
                 </button>
               ) : (
                 <>
-                  <button className="btn btn-outline btn-lg" onClick={handleAddToCartClick} style={{ flex: 1, fontWeight: '700', border: '1px solid #e2e8f0', background: '#fff', color: 'var(--text)' }}>
-                    Add to Cart
+                  <button className="pd-btn outline" onClick={handleAddToCartClick}>
+                    <i className="fas fa-shopping-cart"></i> Add to Cart
                   </button>
-                  <button className="btn btn-lg" onClick={handleBuyNowClick} style={{ flex: 1, fontWeight: '700', background: 'var(--primary)', color: '#fff', border: 'none' }}>
-                    Buy Now
+                  <button className="pd-btn buy" onClick={handleBuyNowClick}>
+                    <i className="fas fa-bolt"></i> Buy Now
                   </button>
                 </>
               )}
             </div>
 
-            {/* Quick trust badges */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '0.75rem', color: 'var(--text-light)', background: '#f8fafc', padding: '16px', borderRadius: '8px' }}>
-              <span style={{ display: 'flex', alignHTML: 'center', gap: '6px' }}><i className="fas fa-truck text-gray"></i> Free Delivery above ₹499</span>
-              <span style={{ display: 'flex', alignHTML: 'center', gap: '6px' }}><i className="fas fa-undo text-gray"></i> 7 Days Replacement</span>
-              <span style={{ display: 'flex', alignHTML: 'center', gap: '6px' }}><i className="fas fa-money-bill-wave text-gray"></i> Cash on Delivery</span>
-              <span style={{ display: 'flex', alignHTML: 'center', gap: '6px' }}><i className="fas fa-leaf text-gray"></i> 100% Organic</span>
+            {/* Trust Strip Badges */}
+            <div className="pd-trust-grid">
+              <span className="pd-trust-item"><i className="fas fa-truck"></i> Free Delivery above ₹499</span>
+              <span className="pd-trust-item"><i className="fas fa-undo"></i> 7 Days Return Policy</span>
+              <span className="pd-trust-item"><i className="fas fa-money-bill-wave"></i> Cash on Delivery</span>
+              <span className="pd-trust-item"><i className="fas fa-leaf"></i> 100% Certified Organic</span>
             </div>
           </div>
         </div>
 
         {/* Informative Tabs Section */}
-        <div id="tabsSection" style={{ marginBottom: '40px' }}>
-          <div className="tabs" style={{ display: 'flex', gap: '2px', borderBottom: '1px solid var(--border)', marginBottom: '20px' }}>
-            <button className={`tab ${activeTab === 'description' ? 'active' : ''}`} onClick={() => setActiveTab('description')}>Description</button>
-            <button className={`tab ${activeTab === 'nutrition' ? 'active' : ''}`} onClick={() => setActiveTab('nutrition')}>Nutritional Info</button>
-            <button className={`tab ${activeTab === 'farm' ? 'active' : ''}`} onClick={() => setActiveTab('farm')}>Farm Source</button>
-            <button className={`tab ${activeTab === 'delivery' ? 'active' : ''}`} onClick={() => setActiveTab('delivery')}>Delivery & Returns</button>
-            <button className={`tab ${activeTab === 'certifications' ? 'active' : ''}`} onClick={() => setActiveTab('certifications')}>Certifications</button>
+        <div className="pd-tabs-container">
+          <div className="pd-tabs-list">
+            <button className={`pd-tab-btn ${activeTab === 'description' ? 'active' : ''}`} onClick={() => setActiveTab('description')}>Description</button>
+            <button className={`pd-tab-btn ${activeTab === 'nutrition' ? 'active' : ''}`} onClick={() => setActiveTab('nutrition')}>Nutritional Info</button>
+            <button className={`pd-tab-btn ${activeTab === 'farm' ? 'active' : ''}`} onClick={() => setActiveTab('farm')}>Farm Source</button>
+            <button className={`pd-tab-btn ${activeTab === 'delivery' ? 'active' : ''}`} onClick={() => setActiveTab('delivery')}>Delivery & Returns</button>
+            <button className={`pd-tab-btn ${activeTab === 'certifications' ? 'active' : ''}`} onClick={() => setActiveTab('certifications')}>Certifications</button>
           </div>
 
-          {/* Description Content */}
-          {activeTab === 'description' && (
-            <div className="tab-content active" id="tab-description">
-              <div style={{ lineH: '2', color: 'var(--text)', fontSize: '0.95rem' }}>
-                <p>{product.description || 'Premium organic product from certified farms.'}</p>
-                <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div style={{ background: 'rgba(45,106,79,0.05)', padding: '16px', borderRadius: '8px' }}>
-                    <h4 style={{ color: 'var(--primary)', marginBottom: '8px', fontWeight: '600' }}>🌿 Why Organic?</h4>
-                    <ul style={{ fontSize: '0.85rem', color: 'var(--text-light)', lineH: '2', paddingLeft: '16px', listStyleType: 'disc' }}>
-                      <li>No synthetic pesticides or chemicals</li>
-                      <li>Non-GMO verified</li>
-                      <li>Sustainably farmed</li>
-                      <li>Better for your health & the environment</li>
+          <div className="pd-tab-content">
+            {/* Description Content */}
+            {activeTab === 'description' && (
+              <div style={{ lineHeight: '1.7', color: '#334155', fontSize: '0.9rem' }}>
+                <p style={{ marginBottom: '16px' }}>{product.description || 'Premium organic food product sourced directly from certified sustainable farms.'}</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '14px', marginTop: '18px' }}>
+                  <div style={{ background: '#f0faf5', padding: '16px', borderRadius: '12px', border: '1px solid #e8f5ee' }}>
+                    <h4 style={{ color: '#1a5c38', marginBottom: '8px', fontWeight: '700', fontSize: '0.9rem', fontFamily: 'Poppins' }}>🌿 Why Curify Organic?</h4>
+                    <ul style={{ fontSize: '0.82rem', color: '#475569', lineHeight: '1.7', paddingLeft: '16px', listStyleType: 'disc' }}>
+                      <li>Cultivated without synthetic pesticides, weedicides, or chemical fertilizers.</li>
+                      <li>Strict Non-GMO sourcing standards.</li>
+                      <li>Farmed using regenerative, eco-friendly soil practices.</li>
+                      <li>Preserves natural nutrients, minerals, and rich wholesome flavors.</li>
                     </ul>
                   </div>
-                  <div style={{ background: 'rgba(247,127,0,0.05)', padding: '16px', borderRadius: '8px' }}>
-                    <h4 style={{ color: 'var(--accent)', marginBottom: '8px', fontWeight: '600' }}>💡 How to Use</h4>
-                    <ul style={{ fontSize: '0.85rem', color: 'var(--text-light)', lineH: '2', paddingLeft: '16px', listStyleType: 'disc' }}>
-                      <li>Wash thoroughly before use</li>
-                      <li>Store in a cool, dry place</li>
-                      <li>Best consumed within 3-5 days</li>
-                      <li>Check individual product label for specific instructions</li>
+                  <div style={{ background: '#fff9f6', padding: '16px', borderRadius: '12px', border: '1px solid #ffece6' }}>
+                    <h4 style={{ color: '#e05a2b', marginBottom: '8px', fontWeight: '700', fontSize: '0.9rem', fontFamily: 'Poppins' }}>💡 Usage Instructions</h4>
+                    <ul style={{ fontSize: '0.82rem', color: '#475569', lineHeight: '1.7', paddingLeft: '16px', listStyleType: 'disc' }}>
+                      <li>Wash produce thoroughly under running clean water prior to cooking or eating.</li>
+                      <li>Store in dry, clean, aerated containers or refrigerate fresh perishables.</li>
+                      <li>For best taste and maximum freshness, consume fresh produce within 3-5 days.</li>
+                      <li>Refer to the packing labels for batch numbers and packaging dates.</li>
                     </ul>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Nutritional Info Content */}
-          {activeTab === 'nutrition' && (
-            <div className="tab-content active" id="tab-nutrition">
-              {product.category === 'herbal' ? (
-                <div style={{ padding: '20px', background: 'var(--bg)', borderRadius: '8px' }}>
-                  <h3 style={{ marginBottom: '12px', fontWeight: '600' }}>🌿 Ingredients & Properties</h3>
-                  <p style={{ lineH: '1.8', color: 'var(--text-light)' }}>
-                    This is an external-use herbal product. Nutritional values are not applicable. Please refer to the product packaging for full ingredient list, usage instructions, and allergen information.
-                  </p>
-                  <p style={{ marginTop: '12px', fontSize: '0.85rem', color: 'var(--text-light)' }}>
-                    <strong>Safety note:</strong> Perform a patch test before first use. Discontinue if irritation occurs. For external use only. Keep away from eyes. Consult a dermatologist if you have sensitive skin.
-                  </p>
-                </div>
-              ) : (
-                <div style={{ maxWidth: '500px' }}>
-                  <table className="cart-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr>
-                        <th style={{ background: 'var(--primary)', color: '#fff', padding: '10px', textAlign: 'left' }}>Nutrient</th>
-                        <th style={{ background: 'var(--primary)', color: '#fff', padding: '10px', textAlign: 'left' }}>Per 100g/ml</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '10px' }}>🔥 <strong>Calories</strong></td>
-                        <td style={{ padding: '10px' }}>{product.nutritionalInfo?.calories || '120 kcal'}</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '10px' }}>💪 <strong>Protein</strong></td>
-                        <td style={{ padding: '10px' }}>{product.nutritionalInfo?.protein || '2.4g'}</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '10px' }}>🌾 <strong>Carbohydrates</strong></td>
-                        <td style={{ padding: '10px' }}>{product.nutritionalInfo?.carbs || '18.5g'}</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '10px' }}>🥑 <strong>Fat</strong></td>
-                        <td style={{ padding: '10px' }}>{product.nutritionalInfo?.fat || '0.3g'}</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '10px' }}>🌿 <strong>Dietary Fibre</strong></td>
-                        <td style={{ padding: '10px' }}>{product.nutritionalInfo?.fiber || '3.2g'}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <p style={{ marginTop: '12px', fontSize: '0.8rem', color: 'var(--text-light)' }}>
-                    * Approximate values. Actual nutritional content may vary slightly between batches.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Farm Source Content */}
-          {activeTab === 'farm' && (
-            <div className="tab-content active" id="tab-farm">
-              <div style={{ background: 'linear-gradient(135deg,rgba(45,106,79,0.05),rgba(45,106,79,0.02))', padding: '24px', borderRadius: '12px', border: '1px solid rgba(45,106,79,0.1)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                  <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem', color: '#fff' }}>🏡</div>
+            {/* Nutritional Info Content */}
+            {activeTab === 'nutrition' && (
+              <div>
+                {product.category === 'herbal' ? (
+                  <div style={{ lineHeight: '1.7', color: '#475569', fontSize: '0.88rem' }}>
+                    <h4 style={{ marginBottom: '8px', fontWeight: '700', color: '#1a5c38', fontFamily: 'Poppins' }}>🌿 Herbal Ingredients & Safety Guide</h4>
+                    <p style={{ marginBottom: '10px' }}>
+                      This is an external-use or cosmetic herbal product. Nutritional values are not applicable. Please refer to the back packaging for the complete botanical ingredients list.
+                    </p>
+                    <p style={{ fontSize: '0.8rem', color: '#e05a2b', fontWeight: '600' }}>
+                      * Perform a small patch test before first topical use. Discontinue if redness or irritation occurs. External use only.
+                    </p>
+                  </div>
+                ) : (
                   <div>
-                    <h3 style={{ margin: 0, fontWeight: '700' }}>{product.farmSource?.farmName || 'Organic Farm Partner'}</h3>
-                    <p style={{ color: 'var(--text-light)', fontSize: '0.85rem', margin: '4px 0 0' }}>
-                      <i className="fas fa-map-marker-alt"></i> {product.farmSource?.location || 'Western Ghats, India'}
+                    <table className="pd-nutrition-table">
+                      <thead>
+                        <tr style={{ background: '#1a5c38', color: '#fff', fontSize: '0.82rem' }}>
+                          <td style={{ padding: '8px 12px', fontWeight: '700', borderTopLeftRadius: '8px', borderBottomLeftRadius: '8px' }}>Nutrient Type</td>
+                          <td style={{ padding: '8px 12px', fontWeight: '700', borderTopRightRadius: '8px', borderBottomRightRadius: '8px' }}>Value Per 100g</td>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>🔥 <strong>Energy / Calories</strong></td>
+                          <td>{product.nutritionalInfo?.calories || '120 kcal'}</td>
+                        </tr>
+                        <tr>
+                          <td>💪 <strong>Protein</strong></td>
+                          <td>{product.nutritionalInfo?.protein || '2.4 g'}</td>
+                        </tr>
+                        <tr>
+                          <td>🌾 <strong>Total Carbohydrates</strong></td>
+                          <td>{product.nutritionalInfo?.carbs || '18.5 g'}</td>
+                        </tr>
+                        <tr>
+                          <td>🥑 <strong>Healthy Fats</strong></td>
+                          <td>{product.nutritionalInfo?.fat || '0.3 g'}</td>
+                        </tr>
+                        <tr>
+                          <td>🌿 <strong>Dietary Fiber</strong></td>
+                          <td>{product.nutritionalInfo?.fiber || '3.2 g'}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p style={{ marginTop: '10px', fontSize: '0.74rem', color: '#888' }}>
+                      * Values are approximate. Natural organic produce may vary slightly between agricultural harvests.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Farm Source Content */}
+            {activeTab === 'farm' && (
+              <div style={{ background: '#fafdfb', padding: '18px', borderRadius: '12px', border: '1px solid #e8f5ee' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#1a5c38', display: 'flex', alignItems: 'center', justify: 'center', fontSize: '1.5rem', color: '#fff' }}>🏡</div>
+                  <div>
+                    <h3 style={{ margin: 0, fontWeight: '800', color: '#1a5c38', fontSize: '1rem', fontFamily: 'Poppins' }}>
+                      {product.farmSource?.farmName || 'Organic Farm Partner'}
+                    </h3>
+                    <p style={{ color: '#64748b', fontSize: '0.78rem', margin: '2px 0 0', fontWeight: '500' }}>
+                      <i className="fas fa-map-marker-alt" style={{ marginRight: '4px' }}></i> {product.farmSource?.location || 'Western Ghats, India'}
                     </p>
                   </div>
                 </div>
-                <p style={{ lineH: '1.8', color: 'var(--text)', marginBottom: '16px' }}>
-                  {product.farmSource?.description || 'Our trusted organic farm partner runs zero-pesticide, biodynamic operations to grow rich, wholesome, and completely organic foods.'}
+                <p style={{ lineHeight: '1.7', color: '#475569', fontSize: '0.88rem', marginBottom: '14px' }}>
+                  {product.farmSource?.description || 'Our trusted farm network operates certified pesticide-free cultivation, utilizing nutrient-rich soil and standard rain-fed systems to bring you the highest quality organic harvest.'}
                 </p>
-                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                  <span style={{ background: '#fff', padding: '6px 14px', borderRadius: '20px', fontSize: '0.8rem', border: '1px solid var(--border)' }}><i className="fas fa-certificate" style={{ color: 'var(--primary)' }}></i> NPOP Certified</span>
-                  <span style={{ background: '#fff', padding: '6px 14px', borderRadius: '20px', fontSize: '0.8rem', border: '1px solid var(--border)' }}><i className="fas fa-leaf" style={{ color: 'var(--success)' }}></i> 100% Organic</span>
-                  <span style={{ background: '#fff', padding: '6px 14px', borderRadius: '20px', fontSize: '0.8rem', border: '1px solid var(--border)' }}><i className="fas fa-check-circle" style={{ color: 'var(--primary)' }}></i> FSSAI Approved</span>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ background: '#fff', padding: '5px 12px', borderRadius: '16px', fontSize: '0.76rem', border: '1px solid #cbd5e1', fontWeight: '600', color: '#1a5c38' }}><i className="fas fa-certificate"></i> NPOP Certified</span>
+                  <span style={{ background: '#fff', padding: '5px 12px', borderRadius: '16px', fontSize: '0.76rem', border: '1px solid #cbd5e1', fontWeight: '600', color: '#1a5c38' }}><i className="fas fa-leaf"></i> 100% Organic</span>
+                  <span style={{ background: '#fff', padding: '5px 12px', borderRadius: '16px', fontSize: '0.76rem', border: '1px solid #cbd5e1', fontWeight: '600', color: '#1a5c38' }}><i className="fas fa-check-circle"></i> FSSAI Compliant</span>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Delivery & Returns Content */}
-          {activeTab === 'delivery' && (
-            <div className="tab-content active" id="tab-delivery">
-              <div style={{ display: 'grid', gap: '20px' }}>
-                <div style={{ background: 'rgba(46,204,113,0.05)', padding: '20px', borderRadius: '8px', borderLeft: '4px solid var(--success)' }}>
-                  <h3 style={{ marginBottom: '8px', color: 'var(--success)', fontWeight: '600' }}><i className="fas fa-truck"></i> Delivery Information</h3>
-                  <p style={{ lineH: '1.8', color: 'var(--text)' }}>
-                    {product.deliveryInfo || 'Standard delivery within 2-4 business days. Free delivery on orders above ₹499. Same day or express options available in metros.'}
+            {/* Delivery & Returns Content */}
+            {activeTab === 'delivery' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ background: '#f0faf5', padding: '16px', borderRadius: '10px', borderLeft: '4px solid #15803d' }}>
+                  <h4 style={{ margin: '0 0 6px', color: '#15803d', fontWeight: '800', fontSize: '0.88rem', fontFamily: 'Poppins' }}>
+                    <i className="fas fa-truck" style={{ marginRight: '6px' }}></i> Delivery Scheduling
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '0.84rem', color: '#475569', lineHeight: '1.6' }}>
+                    {product.deliveryInfo || 'Standard shipment arrives at your doorstep in 2-4 business days. Free home delivery threshold is ₹499. Metros have express next-day delivery.'}
                   </p>
                 </div>
-                <div style={{ background: 'rgba(52,152,219,0.05)', padding: '20px', borderRadius: '8px', borderLeft: '4px solid #3498db' }}>
-                  <h3 style={{ marginBottom: '8px', color: '#3498db', fontWeight: '600' }}><i className="fas fa-undo"></i> Return & Refund Policy</h3>
-                  <p style={{ lineH: '1.8', color: 'var(--text)' }}>
-                    {product.returnPolicy || '7-day easy return policy for fresh products. Full refund or replacement if quality standards are not met.'}
+                <div style={{ background: '#f0f9ff', padding: '16px', borderRadius: '10px', borderLeft: '4px solid #0284c7' }}>
+                  <h4 style={{ margin: '0 0 6px', color: '#0284c7', fontWeight: '800', fontSize: '0.88rem', fontFamily: 'Poppins' }}>
+                    <i className="fas fa-undo" style={{ marginRight: '6px' }}></i> Returns Policy
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '0.84rem', color: '#475569', lineHeight: '1.6' }}>
+                    {product.returnPolicy || 'We offer a 7-day hassle-free return window for fresh goods. Get a full replacement or refund in case of transit damages or quality shortfalls.'}
                   </p>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Certifications & Quality Assurance Tab */}
-          {activeTab === 'certifications' && (
-            <div className="tab-content active" id="tab-certifications">
-              <div style={{ display: 'grid', gap: '16px' }}>
-                <div style={{ background: 'linear-gradient(135deg,rgba(26,92,56,0.06),rgba(26,92,56,0.02))', padding: '20px', borderRadius: '12px', border: '1px solid rgba(26,92,56,0.12)' }}>
-                  <h3 style={{ marginBottom: '16px', color: 'var(--primary)', fontWeight: '700' }}>🏅 Quality Certifications</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            {/* Certifications Tab */}
+            {activeTab === 'certifications' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ background: 'linear-gradient(135deg, rgba(26,92,56,0.05), rgba(26,92,56,0.01))', padding: '18px', borderRadius: '14px', border: '1px solid rgba(26,92,56,0.1)' }}>
+                  <h4 style={{ marginBottom: '14px', color: '#1a5c38', fontWeight: '800', fontSize: '0.9rem', fontFamily: 'Poppins' }}>🏅 Quality Certifications</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
                     {[
-                      { icon: '🌿', label: 'FSSAI Certified', sub: 'Lic. 10021032001234' },
-                      { icon: '🌱', label: 'Organic India', sub: 'Zero synthetic pesticides' },
-                      { icon: '✅', label: 'Non-GMO Verified', sub: 'Genetically unmodified' },
-                      { icon: '🏭', label: 'ISO 22000:2018', sub: 'Food safety management' },
+                      { icon: '🌿', label: 'FSSAI Certified', sub: 'Lic. 10021032001234 — Standard Food Safety Compliance' },
+                      { icon: '🌱', label: 'NPOP Organic India', sub: 'Certified zero synthetic inputs & chemical residues' },
+                      { icon: '✅', label: 'Non-GMO Verified', sub: 'Produced without genetic modification bio-engineering' },
+                      { icon: '🏭', label: 'ISO 22000:2018', sub: 'International Standard Food Safety Management System' },
                     ].map((c, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', background: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                        <span style={{ fontSize: '1.6rem' }}>{c.icon}</span>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                        <span style={{ fontSize: '1.5rem' }}>{c.icon}</span>
                         <div>
-                          <strong style={{ fontSize: '0.85rem', color: 'var(--text)' }}>{c.label}</strong>
-                          <p style={{ fontSize: '0.75rem', color: 'var(--text-light)', margin: '2px 0 0' }}>{c.sub}</p>
+                          <strong style={{ fontSize: '0.84rem', color: '#1a5c38', display: 'block', fontFamily: 'Poppins' }}>{c.label}</strong>
+                          <p style={{ fontSize: '0.72rem', color: '#64748b', margin: '1px 0 0' }}>{c.sub}</p>
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div style={{ background: 'linear-gradient(135deg,rgba(224,90,43,0.06),rgba(224,90,43,0.02))', padding: '20px', borderRadius: '12px', border: '1px solid rgba(224,90,43,0.12)' }}>
-                  <h3 style={{ marginBottom: '16px', color: 'var(--accent)', fontWeight: '700' }}>🔒 Trust & Safety</h3>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                    {['♻️ Eco-Friendly Packaging', '❄️ Cold-Chain Delivery', '↩️ 7-Day Easy Returns', '💳 Secure Razorpay Checkout', '🚫 No Artificial Colours', '🌾 Farm-to-Door'].map((b, i) => (
-                      <span key={i} style={{ background: '#fff', padding: '8px 14px', borderRadius: '20px', fontSize: '0.8rem', border: '1px solid var(--border)', fontWeight: '500', color: 'var(--text)' }}>{b}</span>
+                <div style={{ background: 'linear-gradient(135deg, rgba(224,90,43,0.05), rgba(224,90,43,0.01))', padding: '18px', borderRadius: '14px', border: '1px solid rgba(224,90,43,0.1)' }}>
+                  <h4 style={{ marginBottom: '14px', color: '#e05a2b', fontWeight: '800', fontSize: '0.9rem', fontFamily: 'Poppins' }}>🔒 Trust Badges & Safety</h4>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {['♻️ Eco-Friendly Packaging', '❄️ Fresh Cold-Chain Transit', '↩️ 7-Day Replacement Guarantee', '💳 Secure SSL Gateway Payments', '🚫 No Artificial Preservatives', '🌾 Standard Farm-to-Fork Traceability'].map((b, i) => (
+                      <span key={i} style={{ background: '#fff', padding: '6px 12px', borderRadius: '16px', fontSize: '0.76rem', border: '1px solid #cbd5e1', fontWeight: '600', color: '#475569' }}>{b}</span>
                     ))}
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Related Products Section */}
         {relatedProducts.length > 0 && (
-          <section className="section">
-            <h2 className="section-title" style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '16px' }}>Related Products</h2>
-            <div className="product-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
+          <section style={{ marginTop: '36px' }}>
+            <h2 className="pd-related-sec-title">Related Products</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
               {relatedProducts.map(p => (
                 <ProductCard key={p._id} product={p} />
               ))}
             </div>
           </section>
         )}
+
       </div>
-    </>
+    </div>
   );
 }
