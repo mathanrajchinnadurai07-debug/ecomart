@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useCart } from '../context/CartContext';
+import { ALL_PRODUCTS } from '../data/products';
 
 export default function Layout({ children }) {
   const router = useRouter();
@@ -16,7 +17,24 @@ export default function Layout({ children }) {
   const [chatInput, setChatInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showBadge, setShowBadge] = useState(false);
+  const [chatbotSearchQuery, setChatbotSearchQuery] = useState('');
+  const [chatbotSearchResults, setChatbotSearchResults] = useState([]);
   const msgsEndRef = useRef(null);
+
+  const handleChatbotSearch = (e) => {
+    const q = e.target.value;
+    setChatbotSearchQuery(q);
+    if (q.trim().length < 2) {
+      setChatbotSearchResults([]);
+      return;
+    }
+    const queryLower = q.toLowerCase();
+    const results = ALL_PRODUCTS.filter(p => 
+      p.name.toLowerCase().includes(queryLower) || 
+      p.category.toLowerCase().includes(queryLower)
+    ).slice(0, 5);
+    setChatbotSearchResults(results);
+  };
 
   const STORE_NAME = 'Curify';
   const STORE_HOURS = '9:00 AM – 9:00 PM';
@@ -169,144 +187,127 @@ export default function Layout({ children }) {
   return (
     <>
       {/* HEADER */}
-      <header className="m-header" id="mHeader">
-        <div className="m-header-top">
-          <Link href="/" className="m-logo">
-            <div className="m-logo-icon"><span>🌿</span></div>
-            <div className="m-logo-text"><span>Curify</span><span>Organic</span></div>
-          </Link>
-          <div className="m-header-actions">
-            {user ? (
-              <>
-                <Link href="/dashboard" className="m-header-btn" id="authBtn">
-                  <i className="fas fa-user-circle"></i>
-                  <span style={{ fontSize: '0.75rem', marginLeft: '4px' }}>
-                    {userProfile?.name ? userProfile.name.split(' ')[0] : 'Profile'}
-                  </span>
-                </Link>
-                <button 
-                  onClick={logout} 
-                  className="m-header-btn" 
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}
-                  title="Logout"
-                >
-                  <i className="fas fa-sign-out-alt"></i>
-                </button>
-              </>
-            ) : (
-              <Link href="/login" className="m-header-btn" id="authBtn">
-                <i className="fas fa-user"></i>
-                <span style={{ fontSize: '0.75rem', marginLeft: '4px' }}>Login</span>
-              </Link>
-            )}
-            <Link href="/dashboard?tab=wishlist" className="m-header-btn">
-              <i className="fas fa-heart"></i>
-              {wishlist.length > 0 && (
-                <span className="m-bnav-badge" style={{ display: 'flex', top: '-4px', right: '-4px' }}>
-                  {wishlist.length}
-                </span>
-              )}
+      {router.pathname === '/' && (
+        <header className="m-header" id="mHeader">
+          <div className="m-header-top">
+            <Link href="/" className="m-logo">
+              <div className="m-logo-icon"><span>🌿</span></div>
+              <div className="m-logo-text"><span>Curify</span><span>Organic</span></div>
             </Link>
+            <div className="m-header-actions">
+              <Link href="/dashboard?tab=wishlist" className="m-header-btn">
+                <i className="fas fa-heart"></i>
+                {wishlist.length > 0 && (
+                  <span className="m-bnav-badge" style={{ display: 'flex', top: '-4px', right: '-4px' }}>
+                    {wishlist.length}
+                  </span>
+                )}
+              </Link>
+            </div>
           </div>
+
+          <form onSubmit={handleSearch} className="m-search-wrap">
+            <select 
+              className="m-search-dept" 
+              value={searchCategory}
+              onChange={(e) => setSearchCategory(e.target.value)}
+            >
+              <option value="">All</option>
+              <option value="biscuits">Biscuits</option>
+              <option value="snacks">Snacks</option>
+              <option value="mushroom">Mushroom</option>
+              <option value="chicken">Chicken</option>
+              <option value="mutton">Mutton</option>
+              <option value="grocery">Grocery</option>
+              <option value="herbal">Herbal</option>
+              <option value="dryfruits">Dry Fruits</option>
+              <option value="flour">Flour</option>
+              <option value="beverages">Beverages</option>
+              <option value="spreads">Spreads</option>
+              <option value="pickles">Pickles</option>
+              <option value="superfoods">Superfoods</option>
+              <option value="readytocook">Ready to Cook</option>
+              <option value="vegetables">Vegetables</option>
+              <option value="fruits">Fruits</option>
+            </select>
+            <button type="submit" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+              <i className="fas fa-search m-search-icon"></i>
+            </button>
+            <input 
+              type="text" 
+              placeholder="Search 50+ organic products..." 
+              className="m-search-input"
+              value={searchQuery}
+              readOnly
+              onClick={() => router.push('/search')}
+              onTouchStart={() => router.push('/search')}
+            />
+          </form>
+
+          <div className="m-location-bar">
+            <i className="fas fa-map-marker-alt"></i>
+            <span onClick={handleDetectLocation} style={{ cursor: 'pointer' }}>
+              Deliver to <strong>{userLocation}</strong>
+            </span>
+            <i className="fas fa-chevron-down" style={{ fontSize: '0.6rem', marginLeft: '2px' }}></i>
+            <Link href="/products?bestseller=true" className="m-prime-btn">🔥 Today's Deals</Link>
+          </div>
+        </header>
+      )}
+
+      {/* CATEGORY TABS (SCROLLABLE ROW) ONLY ON HOME PAGE */}
+      {router.pathname === '/' && (
+        <div className="m-category-tabs">
+          <Link href="/" className={`m-cat-tab ${router.pathname === '/' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🏠</div><span>For You</span>
+          </Link>
+          <Link href="/products?category=biscuits" className={`m-cat-tab ${router.query.category === 'biscuits' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🍪</div><span>Biscuits</span>
+          </Link>
+          <Link href="/products?category=snacks" className={`m-cat-tab ${router.query.category === 'snacks' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🥜</div><span>Snacks</span>
+          </Link>
+          <Link href="/products?category=mushroom" className={`m-cat-tab ${router.query.category === 'mushroom' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🍄</div><span>Mushroom</span>
+          </Link>
+          <Link href="/products?category=chicken" className={`m-cat-tab ${router.query.category === 'chicken' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🍗</div><span>Chicken</span>
+          </Link>
+          <Link href="/products?category=mutton" className={`m-cat-tab ${router.query.category === 'mutton' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🍖</div><span>Mutton</span>
+          </Link>
+          <Link href="/products?category=grocery" className={`m-cat-tab ${router.query.category === 'grocery' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🏪</div><span>Grocery</span>
+          </Link>
+          <Link href="/products?category=dryfruits" className={`m-cat-tab ${router.query.category === 'dryfruits' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🥣</div><span>Dry Fruits</span>
+          </Link>
+          <Link href="/products?category=flour" className={`m-cat-tab ${router.query.category === 'flour' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🌾</div><span>Flour</span>
+          </Link>
+          <Link href="/products?category=beverages" className={`m-cat-tab ${router.query.category === 'beverages' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">☕</div><span>Beverages</span>
+          </Link>
+          <Link href="/products?category=spreads" className={`m-cat-tab ${router.query.category === 'spreads' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🍯</div><span>Spreads</span>
+          </Link>
+          <Link href="/products?category=pickles" className={`m-cat-tab ${router.query.category === 'pickles' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🥒</div><span>Pickles</span>
+          </Link>
+          <Link href="/products?category=superfoods" className={`m-cat-tab ${router.query.category === 'superfoods' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🧬</div><span>Superfoods</span>
+          </Link>
+          <Link href="/products?category=readytocook" className={`m-cat-tab ${router.query.category === 'readytocook' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🍲</div><span>Ready Cook</span>
+          </Link>
+          <Link href="/products?category=vegetables" className={`m-cat-tab ${router.query.category === 'vegetables' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🥬</div><span>Vegetables</span>
+          </Link>
+          <Link href="/products?category=fruits" className={`m-cat-tab ${router.query.category === 'fruits' ? 'active' : ''}`}>
+            <div className="m-cat-tab-icon">🍎</div><span>Fruits</span>
+          </Link>
         </div>
-
-        <form onSubmit={handleSearch} className="m-search-wrap">
-          <select 
-            className="m-search-dept" 
-            value={searchCategory}
-            onChange={(e) => setSearchCategory(e.target.value)}
-          >
-            <option value="">All</option>
-            <option value="biscuits">Biscuits</option>
-            <option value="snacks">Snacks</option>
-            <option value="mushroom">Mushroom</option>
-            <option value="chicken">Chicken</option>
-            <option value="mutton">Mutton</option>
-            <option value="grocery">Grocery</option>
-            <option value="herbal">Herbal</option>
-            <option value="dryfruits">Dry Fruits</option>
-            <option value="flour">Flour</option>
-            <option value="beverages">Beverages</option>
-            <option value="spreads">Spreads</option>
-            <option value="pickles">Pickles</option>
-            <option value="superfoods">Superfoods</option>
-            <option value="readytocook">Ready to Cook</option>
-            <option value="vegetables">Vegetables</option>
-            <option value="fruits">Fruits</option>
-          </select>
-          <button type="submit" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-            <i className="fas fa-search m-search-icon"></i>
-          </button>
-          <input 
-            type="text" 
-            placeholder="Search 50+ organic products..." 
-            className="m-search-input"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </form>
-
-        <div className="m-location-bar">
-          <i className="fas fa-map-marker-alt"></i>
-          <span onClick={handleDetectLocation} style={{ cursor: 'pointer' }}>
-            Deliver to <strong>{userLocation}</strong>
-          </span>
-          <i className="fas fa-chevron-down" style={{ fontSize: '0.6rem', marginLeft: '2px' }}></i>
-          <Link href="/products?bestseller=true" className="m-prime-btn">🔥 Today's Deals</Link>
-        </div>
-      </header>
-
-      {/* CATEGORY TABS (SCROLLABLE ROW) */}
-      <div className="m-category-tabs">
-        <Link href="/" className={`m-cat-tab ${router.pathname === '/' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🏠</div><span>For You</span>
-        </Link>
-        <Link href="/products?category=biscuits" className={`m-cat-tab ${router.query.category === 'biscuits' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🍪</div><span>Biscuits</span>
-        </Link>
-        <Link href="/products?category=snacks" className={`m-cat-tab ${router.query.category === 'snacks' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🥜</div><span>Snacks</span>
-        </Link>
-        <Link href="/products?category=mushroom" className={`m-cat-tab ${router.query.category === 'mushroom' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🍄</div><span>Mushroom</span>
-        </Link>
-        <Link href="/products?category=chicken" className={`m-cat-tab ${router.query.category === 'chicken' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🍗</div><span>Chicken</span>
-        </Link>
-        <Link href="/products?category=mutton" className={`m-cat-tab ${router.query.category === 'mutton' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🍖</div><span>Mutton</span>
-        </Link>
-        <Link href="/products?category=grocery" className={`m-cat-tab ${router.query.category === 'grocery' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🏪</div><span>Grocery</span>
-        </Link>
-        <Link href="/products?category=dryfruits" className={`m-cat-tab ${router.query.category === 'dryfruits' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🥣</div><span>Dry Fruits</span>
-        </Link>
-        <Link href="/products?category=flour" className={`m-cat-tab ${router.query.category === 'flour' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🌾</div><span>Flour</span>
-        </Link>
-        <Link href="/products?category=beverages" className={`m-cat-tab ${router.query.category === 'beverages' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">☕</div><span>Beverages</span>
-        </Link>
-        <Link href="/products?category=spreads" className={`m-cat-tab ${router.query.category === 'spreads' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🍯</div><span>Spreads</span>
-        </Link>
-        <Link href="/products?category=pickles" className={`m-cat-tab ${router.query.category === 'pickles' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🥒</div><span>Pickles</span>
-        </Link>
-        <Link href="/products?category=superfoods" className={`m-cat-tab ${router.query.category === 'superfoods' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🧬</div><span>Superfoods</span>
-        </Link>
-        <Link href="/products?category=readytocook" className={`m-cat-tab ${router.query.category === 'readytocook' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🍲</div><span>Ready Cook</span>
-        </Link>
-        <Link href="/products?category=vegetables" className={`m-cat-tab ${router.query.category === 'vegetables' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🥬</div><span>Vegetables</span>
-        </Link>
-        <Link href="/products?category=fruits" className={`m-cat-tab ${router.query.category === 'fruits' ? 'active' : ''}`}>
-          <div className="m-cat-tab-icon">🍎</div><span>Fruits</span>
-        </Link>
-      </div>
+      )}
 
       {/* MAIN CONTAINER */}
       <main className="m-main-content">
@@ -376,11 +377,17 @@ export default function Layout({ children }) {
         }
         @media(max-width: 480px) {
           .chatbot-widget {
-            width: calc(100% - 32px) !important;
-            right: 16px !important;
-            left: 16px !important;
-            bottom: 90px !important;
-            max-height: 480px !important;
+            width: 100% !important;
+            height: 100vh !important;
+            max-height: 100vh !important;
+            right: 0 !important;
+            left: 0 !important;
+            bottom: 0 !important;
+            top: 0 !important;
+            border-radius: 0 !important;
+            position: fixed !important;
+            margin: 0 !important;
+            z-index: 99999 !important;
           }
         }
 
@@ -500,6 +507,55 @@ export default function Layout({ children }) {
           <button className="chatbot-close" onClick={toggleChat}>
             <i className="fas fa-times"></i>
           </button>
+        </div>
+
+        {/* Chatbot Search Bar */}
+        <div className="chatbot-search-wrap" style={{ padding: '8px 12px', background: '#f4f6f0', borderBottom: '1px solid #e2e8f0', position: 'relative' }}>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <i className="fas fa-search" style={{ position: 'absolute', left: '10px', color: '#1a5c38', fontSize: '0.8rem' }}></i>
+            <input 
+              type="text" 
+              placeholder="Search products in chat..." 
+              value={chatbotSearchQuery}
+              onChange={handleChatbotSearch}
+              style={{
+                width: '100%', padding: '6px 10px 6px 30px', borderRadius: '15px',
+                border: '1.5px solid #cbd5e1', fontSize: '0.78rem', outline: 'none',
+                background: '#fff'
+              }}
+            />
+            {chatbotSearchQuery && (
+              <i className="fas fa-times-circle" onClick={() => { setChatbotSearchQuery(''); setChatbotSearchResults([]); }} style={{ position: 'absolute', right: '10px', color: '#aaa', cursor: 'pointer' }}></i>
+            )}
+          </div>
+          {chatbotSearchResults.length > 0 && (
+            <div className="chatbot-search-results" style={{
+              background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
+              marginTop: '4px', maxHeight: '150px', overflowY: 'auto',
+              boxShadow: '0 4px 10px rgba(0,0,0,0.08)', position: 'absolute',
+              left: '12px', right: '12px', zIndex: 10001
+            }}>
+              {chatbotSearchResults.map(p => (
+                <div 
+                  key={p._id} 
+                  onClick={() => {
+                    router.push(`/product/${p.slug}`);
+                    setChatOpen(false);
+                    setChatbotSearchQuery('');
+                    setChatbotSearchResults([]);
+                  }}
+                  style={{
+                    padding: '8px 12px', borderBottom: '1px solid #f0f0f0',
+                    fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'center', cursor: 'pointer'
+                  }}
+                >
+                  <span style={{ fontWeight: '600', color: '#1a1a2e' }}>{p.name}</span>
+                  <span style={{ color: '#1a5c38', fontWeight: '700' }}>₹{p.discountPrice || p.price}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="chatbot-msgs" id="cbMsgs">

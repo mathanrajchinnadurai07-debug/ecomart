@@ -502,20 +502,12 @@ export default function Dashboard() {
 
       {/* Top Header Section */}
       <div className="dash-header">
-        <div className="dash-header-title">
+        <div className="dash-header-title" style={{ width: '100%', justifyContent: 'space-between', display: 'flex', alignItems: 'center' }}>
           <h1>🌿 My Account</h1>
           <div className="dash-coins">
             <i className="fas fa-coins"></i>
             <span>25 GreenCoins</span>
           </div>
-        </div>
-        
-        <div className="dash-user-card">
-          <div className="dash-user-info">
-            <h2>{userProfile?.name || 'Guest User'}</h2>
-            <span>{maskDataEnabled ? maskEmail(userProfile?.email || user?.email) : (userProfile?.email || user?.email || 'No email associated')}</span>
-          </div>
-          <i className="fas fa-user-circle" style={{ fontSize: '2.2rem', color: 'rgba(255,255,255,0.7)' }}></i>
         </div>
       </div>
 
@@ -1042,12 +1034,7 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Logout button */}
-      <div className="dash-logout-wrap">
-        <button onClick={logout} className="btn-logout">
-          <i className="fas fa-sign-out-alt"></i> Log Out Account
-        </button>
-      </div>
+
 
       {/* Cancellation Modal */}
       {cancelModalOpen && orderToCancel && (

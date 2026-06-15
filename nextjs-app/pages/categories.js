@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { ALL_PRODUCTS } from '../data/products';
+import ProductCard from '../components/ProductCard';
 
 const CAT_META = {
   foryou:      { title: 'For You',              sub: 'Curated picks for you', emoji: '🏠', color: '#e8f5e9' },
@@ -37,22 +38,7 @@ export default function Categories() {
   const getEmoji = (cat) => CAT_META[cat]?.emoji || '🌿';
 
   const ProdCard = ({ p }) => {
-    const price = p.discountPrice || p.price;
-    const discount = p.originalPrice && p.originalPrice > price
-      ? Math.round(((p.originalPrice - price) / p.originalPrice) * 100) : 0;
-    return (
-      <Link href={`/product/${p.slug}`} style={{ textDecoration: 'none' }}>
-        <div className="cp-card">
-          {discount > 0 && <div className="cp-badge">{discount}%</div>}
-          <div className="cp-img">{p.images?.[0]
-            ? <img src={p.images[0]} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '10px' }} />
-            : <span style={{ fontSize: '2rem' }}>{getEmoji(p.category)}</span>}
-          </div>
-          <div className="cp-name">{p.name}</div>
-          <div className="cp-price">₹{price}</div>
-        </div>
-      </Link>
-    );
+    return <ProductCard product={p} />;
   };
 
   return (
@@ -121,7 +107,7 @@ export default function Categories() {
         .cat-sec-label { padding: 14px 14px 8px; font-size: 0.8rem; font-weight: 800; color: #1a1a2e; font-family: 'Poppins', sans-serif; }
 
         /* Product card grid */
-        .cp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 0 12px; }
+        .cp-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 0 12px; }
         .cp-card {
           background: #fff; border-radius: 14px; overflow: hidden;
           box-shadow: 0 2px 8px rgba(0,0,0,0.06); position: relative;

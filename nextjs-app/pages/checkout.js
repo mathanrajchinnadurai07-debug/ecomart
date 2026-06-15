@@ -16,6 +16,11 @@ export default function Checkout() {
   const [discountPercent, setDiscountPercent] = useState(0);
   const [confirmedOrder, setConfirmedOrder] = useState(null);
   const [isLoadingPayment, setIsLoadingPayment] = useState(false);
+  const [showMockPaymentModal, setShowMockPaymentModal] = useState(false);
+  const [mockPaymentPayload, setMockPaymentPayload] = useState(null);
+  const [mockCardDetails, setMockCardDetails] = useState({ number: '', expiry: '', cvv: '', name: '' });
+  const [mockUpiId, setMockUpiId] = useState('');
+  const [processingMockPay, setProcessingMockPay] = useState(false);
   const [maskDataEnabled, setMaskDataEnabled] = useState(true);
 
   useEffect(() => {
@@ -222,13 +227,11 @@ export default function Checkout() {
           throw new Error(razorpayOrder.error || 'Failed to create payment order');
         }
 
-        // Dev mode (no Razorpay keys configured) - simulate payment
+        // Dev mode (no Razorpay keys configured) - simulate payment via mock modal
         if (razorpayOrder._dev_mode) {
-          addToast('Payment simulated (dev mode) ✅', 'success');
-          orderPayload.payment.transactionId = 'pay_dev_' + Date.now().toString().slice(-8);
-          orderPayload.payment.status = 'paid';
+          setMockPaymentPayload(orderPayload);
+          setShowMockPaymentModal(true);
           setIsLoadingPayment(false);
-          await saveOrderToFirestore(orderPayload);
           return;
         }
 
@@ -296,6 +299,43 @@ export default function Checkout() {
       // Cash on Delivery
       await saveOrderToFirestore(orderPayload);
     }
+  };
+
+  const handleConfirmMockPayment = async () => {
+    if (paymentMethod === 'razorpay') {
+      if (!mockCardDetails.number || !mockCardDetails.expiry || !mockCardDetails.cvv) {
+        addToast('Please fill all card details', 'error');
+        return;
+      }
+      if (mockCardDetails.number.replace(/\s/g, '').length !== 16) {
+        addToast('Card number must be 16 digits', 'error');
+        return;
+      }
+    } else if (paymentMethod === 'gpay') {
+      if (!mockUpiId.trim() || !mockUpiId.includes('@')) {
+        addToast('Please enter a valid UPI ID (e.g. name@okhdfcbank)', 'error');
+        return;
+      }
+    }
+
+    setProcessingMockPay(true);
+    setTimeout(async () => {
+      try {
+        const payload = { ...mockPaymentPayload };
+        payload.payment.transactionId = 'pay_dev_' + Date.now().toString().slice(-8);
+        payload.payment.status = 'paid';
+        
+        await saveOrderToFirestore(payload);
+        
+        setShowMockPaymentModal(false);
+        setProcessingMockPay(false);
+        addToast('Payment Successful! 🎉', 'success');
+      } catch (e) {
+        console.error(e);
+        addToast('Mock payment execution failed', 'error');
+        setProcessingMockPay(false);
+      }
+    }, 2000);
   };
 
   const saveOrderToFirestore = async (orderPayload) => {
@@ -886,6 +926,126 @@ export default function Checkout() {
           </aside>
         )}
       </div>
+
+      {/* Mock Payment Modal */}
+      {showMockPaymentModal && (
+        <div className="modal-backdrop" style={{
+          position: 'fixed', inset: 0, zIndex: 100000,
+          background: 'rgba(0,0,0,0.5)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', padding: '16px'
+        }}>
+          <div className="modal-box" style={{
+            background: '#fff', borderRadius: '20px', padding: '24px',
+            width: '100%', maxWidth: '420px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+            position: 'relative', display: 'flex', flexDirection: 'column', gap: '16px',
+            textAlign: 'left'
+          }}>
+            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', color: '#1a5c38', display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'Poppins, sans-serif' }}>
+              <i className="fas fa-shield-alt"></i> Secure Payment Gateway
+            </h3>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#555', background: '#f4f6f0', padding: '12px', borderRadius: '10px' }}>
+              <span>Order Amount:</span>
+              <strong style={{ color: '#1a5c38' }}>₹{grandTotal}</strong>
+            </div>
+
+            {paymentMethod === 'razorpay' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: '600' }}>Enter Card Information:</div>
+                <input 
+                  type="text" 
+                  placeholder="Card Number (16 digits)" 
+                  maxLength="19"
+                  value={mockCardDetails.number}
+                  onChange={(e) => {
+                    let v = e.target.value.replace(/\D/g, '');
+                    v = v.match(/.{1,4}/g)?.join(' ') || v;
+                    setMockCardDetails({ ...mockCardDetails, number: v });
+                  }}
+                  style={{ padding: '10px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <input 
+                    type="text" 
+                    placeholder="MM/YY" 
+                    maxLength="5"
+                    value={mockCardDetails.expiry}
+                    onChange={(e) => {
+                      let v = e.target.value.replace(/\D/g, '');
+                      if (v.length > 2) v = v.slice(0,2) + '/' + v.slice(2,4);
+                      setMockCardDetails({ ...mockCardDetails, expiry: v });
+                    }}
+                    style={{ padding: '10px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
+                  />
+                  <input 
+                    type="password" 
+                    placeholder="CVV" 
+                    maxLength="3"
+                    value={mockCardDetails.cvv}
+                    onChange={(e) => setMockCardDetails({ ...mockCardDetails, cvv: e.target.value.replace(/\D/g, '') })}
+                    style={{ padding: '10px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
+                  />
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="Cardholder Name" 
+                  value={mockCardDetails.name}
+                  onChange={(e) => setMockCardDetails({ ...mockCardDetails, name: e.target.value })}
+                  style={{ padding: '10px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
+                />
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: '600' }}>Enter UPI Information:</div>
+                <input 
+                  type="text" 
+                  placeholder="UPI ID (e.g. name@okhdfcbank)" 
+                  value={mockUpiId}
+                  onChange={(e) => setMockUpiId(e.target.value)}
+                  style={{ padding: '10px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
+                />
+                <div style={{ textAlign: 'center', padding: '10px', background: '#fff9f5', borderRadius: '10px', border: '1px dashed #ffa726', fontSize: '0.78rem', color: '#e65100' }}>
+                  <i className="fas fa-qrcode"></i> Scanning QR Code is also supported on delivery!
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+              <button 
+                onClick={() => setShowMockPaymentModal(false)}
+                disabled={processingMockPay}
+                style={{
+                  flex: 1, padding: '12px', border: '1.5px solid #cbd5e1',
+                  borderRadius: '10px', background: '#fff', color: '#555',
+                  fontWeight: '600', cursor: 'pointer', fontSize: '0.88rem'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConfirmMockPayment}
+                disabled={processingMockPay}
+                style={{
+                  flex: 1.5, padding: '12px', border: 'none',
+                  borderRadius: '10px', background: 'linear-gradient(135deg, #1a5c38, #2d6a4f)',
+                  color: '#fff', fontWeight: '700', cursor: 'pointer', fontSize: '0.88rem',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                }}
+              >
+                {processingMockPay ? (
+                  <>
+                    <i className="fas fa-spinner fa-spin"></i> Processing...
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-lock"></i> Pay Securely
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ height: '80px' }}></div>
     </div>

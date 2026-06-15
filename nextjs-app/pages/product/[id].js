@@ -132,6 +132,36 @@ export default function ProductDetail() {
 
   return (
     <div className="pd-pg">
+      {/* Product Detail Top Header */}
+      <div className="pd-top-header" style={{
+        position: 'sticky', top: 0, zIndex: 200,
+        background: '#fff', borderBottom: '1.5px solid #f0f0f0',
+        padding: '13px 16px', display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', boxShadow: '0 2px 10px rgba(0,0,0,0.05)'
+      }}>
+        <button onClick={() => router.back()} style={{
+          background: '#f4f6f0', border: 'none', borderRadius: '50%',
+          width: '36px', height: '36px', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', cursor: 'pointer', color: '#333'
+        }}>
+          <i className="fas fa-arrow-left"></i>
+        </button>
+        <span style={{
+          fontSize: '1rem', fontWeight: '800', color: '#1a1a2e',
+          fontFamily: 'Poppins, sans-serif', flex: 1, margin: '0 10px',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          textAlign: 'left'
+        }}>
+          {product.name}
+        </span>
+        <Link href="/cart" style={{
+          background: '#f4f6f0', border: 'none', borderRadius: '10px',
+          width: '36px', height: '36px', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', color: '#333', textDecoration: 'none'
+        }}>
+          <i className="fas fa-shopping-cart"></i>
+        </Link>
+      </div>
       <style>{`
         .pd-pg { background: #f4f6f0; min-height: 100vh; padding-bottom: 80px; font-family: 'Inter', sans-serif; }
         

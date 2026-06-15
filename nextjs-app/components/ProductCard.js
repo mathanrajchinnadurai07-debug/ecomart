@@ -116,16 +116,16 @@ export default function ProductCard({ product }) {
         </div>
 
         {/* Weights selection list if multiple weights are defined */}
-        {product.weights && product.weights.length > 1 && (
-          <div className="product-weights-selector" style={{ display: 'flex', gap: '6px', margin: '8px 0', flexWrap: 'wrap' }}>
+        {product.weights && product.weights.length > 1 ? (
+          <div className="product-weights-selector" style={{ display: 'flex', gap: '6px', margin: '8px 0', flexWrap: 'wrap', height: '26px' }}>
             {product.weights.map((w) => (
               <span 
                 key={w.label}
                 className={`weight-option ${selectedWeight === w.label ? 'active' : ''}`}
                 onClick={(e) => handleWeightChange(e, w.label)}
                 style={{
-                  fontSize: '0.75rem',
-                  padding: '3px 8px',
+                  fontSize: '0.7rem',
+                  padding: '2px 6px',
                   borderRadius: '4px',
                   border: '1px solid var(--border)',
                   cursor: 'pointer',
@@ -138,6 +138,8 @@ export default function ProductCard({ product }) {
               </span>
             ))}
           </div>
+        ) : (
+          <div className="product-weights-selector-placeholder" style={{ height: '26px', margin: '8px 0' }}></div>
         )}
 
         {product.unit && !product.weights && (

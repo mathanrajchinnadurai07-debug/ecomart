@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { ALL_PRODUCTS } from '../data/products';
 import { useCart } from '../context/CartContext';
+import ProductCard from '../components/ProductCard';
 
 const ALL_CATS = [
   { key: 'vegetables', emoji: '🥬', label: 'Vegetables' },
@@ -244,39 +245,10 @@ export default function Products() {
         {/* Products */}
         {filtered.length > 0 ? (
           viewMode === 'grid' ? (
-            <div className="prods-grid">
-              {filtered.map(p => {
-                const price = p.discountPrice || p.price;
-                const discount = p.originalPrice && p.originalPrice > price ? Math.round(((p.originalPrice - price) / p.originalPrice) * 100) : 0;
-                const emoji = ALL_CATS.find(c => c.key === p.category)?.emoji || '🌿';
-                return (
-                  <div key={p._id} className="prd-card-g">
-                    {discount > 0 && <div className="prd-discount-badge">{discount}% OFF</div>}
-                    <Link href={`/product/${p.slug}`} style={{ textDecoration: 'none' }}>
-                      <div className="prd-img-g">
-                        {p.images?.[0] ? <img src={p.images[0]} alt={p.name} /> : <span>{emoji}</span>}
-                      </div>
-                    </Link>
-                    <div className="prd-body-g">
-                      <div className="prd-cat-tag">{p.category}</div>
-                      <Link href={`/product/${p.slug}`} style={{ textDecoration: 'none' }}>
-                        <div className="prd-name-g">{p.name}</div>
-                      </Link>
-                      <div className="prd-rating-row">
-                        <span className="prd-stars">{'★'.repeat(Math.floor(p.rating))}{'☆'.repeat(5 - Math.floor(p.rating))}</span>
-                        <span className="prd-rating-num">({p.rating})</span>
-                      </div>
-                      <div className="prd-price-row">
-                        <span className="prd-price">₹{price}</span>
-                        {p.originalPrice > price && <span className="prd-orig">₹{p.originalPrice}</span>}
-                      </div>
-                      <button className="prd-atc-btn" onClick={() => { addToCart(p, '', 1); addToast(`${p.name} added to cart 🌿`, 'success'); }}>
-                        <i className="fas fa-shopping-cart"></i> Add to Cart
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="product-grid" style={{ padding: '10px 12px' }}>
+              {filtered.map(p => (
+                <ProductCard key={p._id} product={p} />
+              ))}
             </div>
           ) : (
             <div className="prods-list">
