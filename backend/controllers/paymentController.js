@@ -1,5 +1,6 @@
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const db = require('../config/database');
 
 const hasRazorpayCredentials = 
   process.env.RAZORPAY_KEY_ID && 
@@ -20,10 +21,37 @@ if (hasRazorpayCredentials) {
 // --------------- POST /api/payments/create ---------------
 const createPaymentOrder = async (req, res, next) => {
   try {
-    const { amount, currency = 'INR', receipt, notes } = req.body;
+    const { amount, currency = 'INR', receipt, notes, items } = req.body;
 
     if (!amount) {
       return res.status(400).json({ success: false, error: 'Amount is required' });
+    }
+
+    let client;
+    if (items && items.length > 0) {
+      client = await db.getClient();
+      try {
+        await client.query('BEGIN');
+        for (const item of items) {
+          const { rows } = await client.query('SELECT stock FROM products WHERE id = $1 FOR UPDATE', [item.productId]);
+          if (!rows.length) {
+            await client.query('ROLLBACK');
+            client.release();
+            return res.status(404).json({ success: false, error: `Product ${item.name || item.productId} not found` });
+          }
+          if (rows[0].stock < item.quantity) {
+            await client.query('ROLLBACK');
+            client.release();
+            return res.status(400).json({ success: false, error: `Insufficient stock for product ${item.name || item.productId}` });
+          }
+        }
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        if (client) client.release();
+      }
     }
 
     if (!hasRazorpayCredentials) {
@@ -125,7 +153,48 @@ const verifyPayment = async (req, res, next) => {
   }
 };
 
+// --------------- POST /api/payments/webhook ---------------
+const paymentWebhook = async (req, res, next) => {
+  try {
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      return res.status(200).send('Webhook secret not configured, ignoring');
+    }
+
+    const signature = req.headers['x-razorpay-signature'];
+    if (!signature) {
+      return res.status(400).send('Signature missing');
+    }
+
+    const expectedSignature = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(JSON.stringify(req.body))
+      .digest('hex');
+
+    if (signature !== expectedSignature) {
+      return res.status(400).send('Invalid signature');
+    }
+
+    const event = req.body.event;
+    const payload = req.body.payload;
+
+    if (event === 'payment.captured') {
+      const payment = payload.payment.entity;
+      // You can update the order status here if order_id is mapped
+      console.log(`Payment captured: ${payment.id} for order ${payment.order_id}`);
+    } else if (event === 'payment.failed') {
+      const payment = payload.payment.entity;
+      console.log(`Payment failed: ${payment.id} for order ${payment.order_id}`);
+    }
+
+    res.status(200).send('OK');
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   createPaymentOrder,
   verifyPayment,
+  paymentWebhook,
 };

@@ -68,10 +68,24 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
-  const handleNewsletterSubmit = (e) => {
+  const handleNewsletterSubmit = async (e) => {
     e.preventDefault();
-    addToast('Thank you for subscribing! 🌿', 'success');
-    setNewsletterEmail('');
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/newsletter`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newsletterEmail })
+      });
+      const data = await res.json();
+      if (data.success) {
+        addToast('Thank you for subscribing! 🌿', 'success');
+        setNewsletterEmail('');
+      } else {
+        addToast(data.error || 'Failed to subscribe', 'error');
+      }
+    } catch (err) {
+      addToast('Something went wrong', 'error');
+    }
   };
 
   // Filter products for homepage sections

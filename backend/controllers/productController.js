@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const { getCache, setCache, deleteCache, deleteCachePattern, TTL } = require('../config/redis');
+const admin = require('firebase-admin');
 
 // --------------- GET /api/products ---------------
 const getAllProducts = async (req, res, next) => {
@@ -116,7 +117,10 @@ const getProductById = async (req, res, next) => {
 // --------------- POST /api/products (admin) ---------------
 const createProduct = async (req, res, next) => {
   try {
-    const { name, price, original_price, discount, category, image_url, description, stock } = req.body;
+    const { 
+      name, price, original_price, discount, category, image_url, description, stock,
+      slug, weights, isFeatured, rating, numReviews
+    } = req.body;
 
     if (!name || !price || !category) {
       return res.status(400).json({ success: false, error: 'Name, price, and category are required' });
@@ -128,10 +132,40 @@ const createProduct = async (req, res, next) => {
       [name, price, original_price || null, discount || 0, category, image_url || null, description || null, stock || 0]
     );
 
+    const productDb = rows[0];
+
+    // Push to Firestore if credentials are configured
+    const hasFirebase = process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL;
+    if (hasFirebase && admin.apps.length > 0) {
+      const dbFirestore = admin.firestore();
+      const docSlug = slug || name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      
+      await dbFirestore.collection('products').doc(docSlug).set({
+        id: productDb.id,
+        name: name.trim(),
+        slug: docSlug,
+        category,
+        price: parseFloat(price),
+        originalPrice: parseFloat(original_price) || parseFloat(price),
+        discount: parseInt(discount) || 0,
+        stock: parseInt(stock) || 0,
+        rating: parseFloat(rating) || 4.5,
+        numReviews: parseInt(numReviews) || 0,
+        description: description ? description.trim() : '',
+        imageUrl: image_url || '',
+        images: image_url ? [image_url] : [],
+        isFeatured: !!isFeatured,
+        weights: weights || [],
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.log(`🔥 Synced product "${name}" to Firestore with slug "${docSlug}"`);
+    }
+
     // Invalidate product list cache
     await deleteCachePattern('products:*');
 
-    res.status(201).json({ success: true, data: rows[0] });
+    res.status(201).json({ success: true, data: productDb });
   } catch (err) {
     next(err);
   }

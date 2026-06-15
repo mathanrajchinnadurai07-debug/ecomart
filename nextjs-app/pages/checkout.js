@@ -212,13 +212,13 @@ export default function Checkout() {
         }
 
         // Create order via our API
-        const response = await fetch('/api/create-order', {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/payments/create`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ amount: grandTotal, currency: 'INR', receipt: orderId })
+          body: JSON.stringify({ amount: grandTotal, currency: 'INR', receipt: orderId, items: orderPayload.items })
         });
 
         const razorpayOrder = await response.json();
@@ -252,7 +252,7 @@ export default function Checkout() {
           handler: async function (paymentResponse) {
             // Verify payment on server
             try {
-              const verifyRes = await fetch('/api/verify-payment', {
+              const verifyRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/payments/verify`, {
                 method: 'POST',
                 headers: { 
                   'Content-Type': 'application/json',
@@ -340,18 +340,36 @@ export default function Checkout() {
 
   const saveOrderToFirestore = async (orderPayload) => {
     try {
-      const orderRef = doc(db, 'users', user.uid, 'orders', orderPayload.orderId);
-      const globalOrderRef = doc(db, 'orders', orderPayload.orderId);
-      
-      await setDoc(orderRef, {
-        ...orderPayload,
-        createdAt: serverTimestamp()
+      let token = 'firebase_guest';
+      if (auth.currentUser) {
+        token = await auth.currentUser.getIdToken();
+      }
+
+      // POST to backend API to save order
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          user_id: user.uid,
+          items: orderPayload.items.map(item => ({
+            product_id: item.productId || item.id,
+            quantity: item.quantity,
+            price: item.price
+          })),
+          total_amount: orderPayload.total,
+          address: orderPayload.address,
+          payment_id: orderPayload.payment.transactionId,
+          status: orderPayload.payment.method === 'cod' ? 'pending' : 'confirmed'
+        })
       });
-      await setDoc(globalOrderRef, {
-        ...orderPayload,
-        userId: user.uid,
-        createdAt: serverTimestamp()
-      });
+
+      const resData = await response.json();
+      if (!response.ok) {
+        throw new Error(resData.error || 'Failed to save order');
+      }
 
       // Clear firestore cart
       const batch = writeBatch(db);

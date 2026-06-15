@@ -1,11 +1,14 @@
 const db = require('../config/database');
 const { deleteCachePattern } = require('../config/redis');
+const admin = require('firebase-admin');
+const { createShiprocketOrder } = require('../config/shiprocket');
+const { sendOrderConfirmationEmail } = require('../utils/email');
 
 // --------------- POST /api/orders ---------------
 const createOrder = async (req, res, next) => {
   const client = await db.getClient();
   try {
-    const { user_id, items, total_amount, address } = req.body;
+    const { user_id, items, total_amount, address, status, payment_id } = req.body;
 
     if (!user_id || !items || !items.length || !total_amount) {
       return res.status(400).json({ success: false, error: 'user_id, items, and total_amount are required' });
@@ -29,18 +32,103 @@ const createOrder = async (req, res, next) => {
     }
 
     // Create the order
+    const initialStatus = status || 'pending';
     const { rows } = await client.query(
-      `INSERT INTO orders (user_id, items, total_amount, address, status)
-       VALUES ($1, $2, $3, $4, 'pending') RETURNING *`,
-      [user_id, JSON.stringify(items), total_amount, JSON.stringify(address || {})]
+      `INSERT INTO orders (user_id, items, total_amount, address, status, payment_id)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [user_id, JSON.stringify(items), total_amount, JSON.stringify(address || {}), initialStatus, payment_id || null]
     );
+
+    // Calculate eco-points (1 point per ₹100 spent)
+    const pointsToAward = Math.floor(total_amount / 100);
+    if (pointsToAward > 0) {
+      await client.query(
+        'UPDATE users SET eco_points = COALESCE(eco_points, 0) + $1 WHERE id = $2',
+        [pointsToAward, user_id]
+      );
+    }
+    const newOrder = rows[0];
+
+    // Attempt to create Shiprocket order
+    let shiprocketOrderId = null;
+    try {
+      const parsedAddress = typeof address === 'string' ? JSON.parse(address) : (address || {});
+      const [firstName, ...lastNameParts] = (parsedAddress.name || 'Customer').split(' ');
+      const lastName = lastNameParts.join(' ') || 'Name';
+      
+      const shiprocketData = {
+        order_id: newOrder.id.toString(),
+        order_date: new Date().toISOString().slice(0, 10),
+        pickup_location: "Primary",
+        billing_customer_name: firstName,
+        billing_last_name: lastName,
+        billing_address: parsedAddress.line1 || 'Address',
+        billing_address_2: parsedAddress.line2 || '',
+        billing_city: parsedAddress.city || 'City',
+        billing_pincode: parsedAddress.pincode || '000000',
+        billing_state: parsedAddress.state || 'State',
+        billing_country: "India",
+        billing_email: parsedAddress.email || "test@example.com",
+        billing_phone: parsedAddress.phone || "0000000000",
+        shipping_is_billing: true,
+        order_items: items.map(i => ({
+          name: i.name || `Product ${i.product_id}`,
+          sku: `SKU-${i.product_id}`,
+          units: i.quantity,
+          selling_price: i.price,
+          discount: 0,
+          tax: 0,
+          hsn: ""
+        })),
+        payment_method: initialStatus === 'pending' ? 'COD' : 'Prepaid',
+        sub_total: total_amount,
+        length: 10,
+        breadth: 10,
+        height: 10,
+        weight: 1 // default weight in kg
+      };
+
+      const srRes = await createShiprocketOrder(shiprocketData);
+      if (srRes && srRes.order_id) {
+        shiprocketOrderId = srRes.order_id;
+        // Optionally update the DB with shiprocketOrderId here
+        await client.query('UPDATE orders SET shiprocket_order_id = $1 WHERE id = $2', [shiprocketOrderId, newOrder.id]);
+        newOrder.shiprocket_order_id = shiprocketOrderId;
+      }
+    } catch (srErr) {
+      console.error('Shiprocket order creation failed during checkout:', srErr);
+    }
 
     await client.query('COMMIT');
 
     // Invalidate relevant caches
     await deleteCachePattern('products:*');
 
-    res.status(201).json({ success: true, data: rows[0] });
+
+    // Sync to Firestore
+    try {
+      await admin.firestore().collection('orders').doc(newOrder.id.toString()).set({
+        ...newOrder,
+        updated_at: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      if (pointsToAward > 0) {
+        await admin.firestore().collection('users').doc(user_id).set({
+          eco_points: admin.firestore.FieldValue.increment(pointsToAward)
+        }, { merge: true });
+      }
+    } catch (fsErr) {
+      console.error('Error syncing to Firestore:', fsErr);
+    }
+
+    // Send Confirmation Email
+    try {
+      await sendOrderConfirmationEmail(newOrder);
+    } catch (emailErr) {
+      console.error('Failed to send confirmation email:', emailErr);
+    }
+
+    res.status(201).json({ success: true, data: newOrder });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -111,18 +199,82 @@ const updateOrderStatus = async (req, res, next) => {
       return res.status(404).json({ success: false, error: 'Order not found' });
     }
 
+    const updatedOrder = rows[0];
+
     // If cancelled, restore stock
     if (status === 'cancelled') {
-      const items = rows[0].items;
+      const items = updatedOrder.items;
       for (const item of items) {
         await db.query('UPDATE products SET stock = stock + $1 WHERE id = $2', [item.quantity, item.product_id]);
       }
       await deleteCachePattern('products:*');
     }
 
-    res.json({ success: true, data: rows[0] });
+    // Sync to Firestore
+    try {
+      await admin.firestore().collection('orders').doc(updatedOrder.id.toString()).update({
+        status: updatedOrder.status,
+        payment_id: updatedOrder.payment_id,
+        updated_at: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (fsErr) {
+      console.error('Error syncing order status update to Firestore:', fsErr);
+    }
+
+    res.json({ success: true, data: updatedOrder });
   } catch (err) {
     next(err);
+  }
+};
+
+// --------------- POST /api/orders/shiprocket/webhook ---------------
+const shiprocketWebhook = async (req, res, next) => {
+  try {
+    const { order_id, current_status, status_code } = req.body;
+    
+    // Validate request header token if Shiprocket provides one (omitted for simplicity here)
+    if (!order_id) return res.status(400).send('Missing order_id');
+
+    // Map Shiprocket status to our status
+    let newStatus = null;
+    const lowerStatus = (current_status || '').toLowerCase();
+    
+    if (lowerStatus.includes('shipped') || lowerStatus.includes('in transit')) {
+      newStatus = 'shipped';
+    } else if (lowerStatus.includes('delivered')) {
+      newStatus = 'delivered';
+    } else if (lowerStatus.includes('canceled') || lowerStatus.includes('cancelled')) {
+      newStatus = 'cancelled';
+    } else if (lowerStatus.includes('processing') || lowerStatus.includes('manifested')) {
+      newStatus = 'processing';
+    }
+
+    if (newStatus) {
+      // Find internal order by shiprocket_order_id
+      const { rows } = await db.query('SELECT * FROM orders WHERE shiprocket_order_id = $1 OR id::text = $1 LIMIT 1', [order_id.toString()]);
+      
+      if (rows.length > 0) {
+        const order = rows[0];
+        
+        await db.query('UPDATE orders SET status = $1 WHERE id = $2', [newStatus, order.id]);
+        
+        // Sync to Firestore
+        try {
+          await admin.firestore().collection('orders').doc(order.id.toString()).update({
+            status: newStatus,
+            updated_at: admin.firestore.FieldValue.serverTimestamp()
+          });
+        } catch (fsErr) {
+          console.error('Error syncing webhook status to Firestore:', fsErr);
+        }
+      }
+    }
+
+    res.setHeader('x-shiprocket-webhook-status', 'success');
+    res.status(200).send('OK');
+  } catch (err) {
+    console.error('Shiprocket webhook error:', err);
+    res.status(500).send('Internal Server Error');
   }
 };
 
@@ -131,4 +283,5 @@ module.exports = {
   getOrdersByUser,
   getOrderById,
   updateOrderStatus,
+  shiprocketWebhook,
 };

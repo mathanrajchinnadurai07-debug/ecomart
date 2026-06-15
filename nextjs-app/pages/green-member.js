@@ -1,14 +1,15 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useCart } from '../context/CartContext';
 import { db } from '../firebase/config';
-import { collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 
 export default function GreenMember() {
   const router = useRouter();
   const { user, userProfile, addToast } = useCart();
   const [orderCount, setOrderCount] = useState(0);
+  const [ecoPoints, setEcoPoints] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,6 +29,11 @@ export default function GreenMember() {
           const ordersRef = collection(db, 'users', user.uid, 'orders');
           const snap = await getDocs(ordersRef);
           setOrderCount(snap.size);
+
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            setEcoPoints(userDoc.data().eco_points || 0);
+          }
         } else {
           // Fallback to local storage
           const localOrders = JSON.parse(localStorage.getItem('Curify_orders') || '[]');
@@ -104,10 +110,13 @@ export default function GreenMember() {
         </div>
 
         {/* Greeting */}
-        <div style={{ padding: '24px 20px 16px' }}>
+        <div style={{ padding: '24px 20px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '300', margin: 0, color: '#1a1a1a' }}>
             Hello, <strong style={{ fontWeight: '700' }}>{userName}</strong>
           </h2>
+          <div style={{ background: '#e8f5e9', padding: '8px 14px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '6px', color: '#2d6a4f', fontWeight: '700' }}>
+            <span style={{ fontSize: '1.2rem' }}>🌿</span> {ecoPoints} Points
+          </div>
         </div>
 
         {/* Progress Card */}

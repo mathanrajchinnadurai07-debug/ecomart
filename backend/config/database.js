@@ -1,8 +1,9 @@
 const { Pool } = require('pg');
 
+// pgBouncer connection pool configuration
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 20,                       // Max connections in pool
+  max: 10,                       // Limit connections for pgBouncer / transaction mode
   idleTimeoutMillis: 30000,      // Close idle connections after 30s
   connectionTimeoutMillis: 5000, // Timeout connecting after 5s
 });
@@ -10,7 +11,7 @@ const pool = new Pool({
 // Log pool events in development
 pool.on('connect', () => {
   if (process.env.NODE_ENV === 'development') {
-    console.log('📦 New PostgreSQL client connected');
+    console.log('📦 Connected to Supabase PostgreSQL (pgBouncer)');
   }
 });
 

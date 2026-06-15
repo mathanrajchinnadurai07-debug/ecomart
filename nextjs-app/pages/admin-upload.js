@@ -1,42 +1,77 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../firebase/config';
+import { storage } from '../firebase/config';
 
 const CATEGORIES = [
-  'biscuits', 'snacks', 'mushroom', 'chicken',
-  'dairy', 'beverages', 'spices', 'oils', 'grains', 'fruits'
+  'biscuits','snacks','mushroom','chicken','mutton','dairy','beverages',
+  'spices','oils','grains','fruits','vegetables','dryfruits','herbal',
+  'flour','spreads','pickles','superfoods','readytocook','grocery'
 ];
 
-const toSlug = (name) =>
-  name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const toSlug = (n) => n.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-export default function AdminUpload() {
+const EMPTY_FORM = {
+  name:'', slug:'', category:'biscuits', price:'', discountPrice:'',
+  stock:'100', rating:'4.5', numReviews:'0', description:'', isFeatured: false, image_url:''
+};
+
+export default function AdminPanel() {
   const router = useRouter();
 
-  const [form, setForm] = useState({
-    name: '', slug: '', category: 'biscuits',
-    price: '', discountPrice: '', stock: '100',
-    rating: '4.5', numReviews: '0',
-    description: '', isFeatured: false,
-  });
+  /* ─── view: 'list' | 'add' | 'edit' ─── */
+  const [view, setView]           = useState('list');
+  const [products, setProducts]   = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [search, setSearch]       = useState('');
+  const [editTarget, setEditTarget] = useState(null); // product being edited
 
-  const [weights, setWeights] = useState([
-    { label: '100g', price: '', discountPrice: '' }
-  ]);
-
-  const [imageFile, setImageFile]       = useState(null);
+  /* form state */
+  const [form, setForm]           = useState(EMPTY_FORM);
+  const [weights, setWeights]     = useState([{ label:'100g', price:'', discountPrice:'' }]);
+  const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [status, setStatus]             = useState('idle'); // idle | uploading | saving | done | error
-  const [errorMsg, setErrorMsg]         = useState('');
-  const [dragging, setDragging]         = useState(false);
+  const [status, setStatus]       = useState('idle');
+  const [errorMsg, setErrorMsg]   = useState('');
+  const [dragging, setDragging]   = useState(false);
+  const fileRef                   = useRef();
 
-  const fileRef = useRef();
+  /* ─── stats ─── */
+  const [stats, setStats] = useState({ total:0, featured:0, outOfStock:0, categories:0 });
 
-  // ── Field handlers ────────────────────────────────────────────────────────
+  /* ─── Load products ─── */
+  const fetchProducts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`${API}/api/products?limit=200`);
+      const d = await r.json();
+      const list = d.data || [];
+      setProducts(list);
+      setStats({
+        total: list.length,
+        featured: list.filter(p => p.isFeatured || p.is_featured).length,
+        outOfStock: list.filter(p => (p.stock || 0) === 0).length,
+        categories: new Set(list.map(p => p.category)).size
+      });
+    } catch {
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+
+  /* ─── Filtered list ─── */
+  const filtered = products.filter(p =>
+    p.name?.toLowerCase().includes(search.toLowerCase()) ||
+    p.category?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  /* ─── Field handlers ─── */
   const handleField = (e) => {
     const { name, value, type, checked } = e.target;
     setForm(f => ({
@@ -46,499 +81,649 @@ export default function AdminUpload() {
     }));
   };
 
-  const handleWeight = (idx, field, val) =>
-    setWeights(ws => ws.map((w, i) => i === idx ? { ...w, [field]: val } : w));
+  const handleWeight = (i, field, val) =>
+    setWeights(ws => ws.map((w, idx) => idx === i ? { ...w, [field]: val } : w));
 
-  const addWeight  = () => setWeights(ws => [...ws, { label: '', price: '', discountPrice: '' }]);
-  const dropWeight = (idx) => setWeights(ws => ws.filter((_, i) => i !== idx));
+  /* ─── Open edit ─── */
+  const openEdit = (p) => {
+    setEditTarget(p);
+    setForm({
+      name: p.name || '',
+      slug: p.slug || toSlug(p.name || ''),
+      category: p.category || 'biscuits',
+      price: p.price || '',
+      discountPrice: p.discount_price || p.discountPrice || '',
+      stock: p.stock ?? 100,
+      rating: p.rating || 4.5,
+      numReviews: p.num_reviews || p.numReviews || 0,
+      description: p.description || '',
+      isFeatured: !!(p.isFeatured || p.is_featured),
+      image_url: p.image_url || p.imageUrl || ''
+    });
+    setWeights((p.weights?.length ? p.weights : [{ label:'100g', price:'', discountPrice:'' }]));
+    setImageFile(null);
+    setImagePreview(p.image_url || p.imageUrl || null);
+    setStatus('idle');
+    setErrorMsg('');
+    setView('edit');
+  };
 
-  // ── Image selection (click or drag) ──────────────────────────────────────
+  const openAdd = () => {
+    setEditTarget(null);
+    setForm(EMPTY_FORM);
+    setWeights([{ label:'100g', price:'', discountPrice:'' }]);
+    setImageFile(null);
+    setImagePreview(null);
+    setStatus('idle');
+    setErrorMsg('');
+    setView('add');
+  };
+
+  /* ─── Image ─── */
   const pickImage = (file) => {
-    if (!file || !file.type.startsWith('image/')) {
-      setErrorMsg('Please select an image file (JPG, PNG, WebP).');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setErrorMsg('Image must be under 10 MB.');
-      return;
-    }
+    if (!file || !file.type.startsWith('image/')) { setErrorMsg('Please select an image file.'); return; }
+    if (file.size > 10 * 1024 * 1024) { setErrorMsg('Image must be under 10 MB.'); return; }
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
     setErrorMsg('');
   };
 
   const onDrop = useCallback((e) => {
-    e.preventDefault();
-    setDragging(false);
+    e.preventDefault(); setDragging(false);
     pickImage(e.dataTransfer.files[0]);
   }, []);
 
-  // ── Upload image to Firebase Storage ────────────────────────────────────
   const uploadImage = () => new Promise((resolve, reject) => {
-    if (!imageFile) { resolve(''); return; }
+    if (!imageFile) { resolve(form.image_url || ''); return; }
     const path = `products/${Date.now()}_${imageFile.name.replace(/\s+/g, '_')}`;
     const sRef = storageRef(storage, path);
     const task = uploadBytesResumable(sRef, imageFile);
-    task.on(
-      'state_changed',
+    task.on('state_changed',
       snap => setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
-      (err) => {
-        // Storage rule error — give user a helpful message
-        if (err.code === 'storage/unauthorized') {
-          reject(new Error(
-            'Firebase Storage permission denied.\n\n' +
-            'Go to Firebase Console → Storage → Rules and set:\n\n' +
-            'allow write: if true;\n\n' +
-            '(You can restrict this later with auth rules.)'
-          ));
-        } else {
-          reject(err);
-        }
-      },
-      async () => {
-        const url = await getDownloadURL(task.snapshot.ref);
-        resolve(url);
-      }
+      reject,
+      async () => resolve(await getDownloadURL(task.snapshot.ref))
     );
   });
 
-  // ── Submit ────────────────────────────────────────────────────────────────
+  /* ─── Submit (add or edit) ─── */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
-
     if (!form.name.trim()) { setErrorMsg('Product name is required.'); return; }
-    if (!form.price)        { setErrorMsg('Price is required.'); return; }
+    if (!form.price) { setErrorMsg('Price is required.'); return; }
 
     try {
-      // 1. Upload image
       setStatus('uploading');
-      let imageUrl = '';
-      if (imageFile) {
-        imageUrl = await uploadImage();
-      }
+      const imageUrl = await uploadImage();
 
-      // 2. Save to Firestore
       setStatus('saving');
       const slug = form.slug || toSlug(form.name);
-      const data = {
-        name:          form.name.trim(),
-        slug,
-        category:      form.category,
-        price:         parseFloat(form.price)         || 0,
-        discountPrice: parseFloat(form.discountPrice) || parseFloat(form.price) || 0,
-        stock:         parseInt(form.stock)           || 0,
-        rating:        parseFloat(form.rating)        || 4.5,
-        numReviews:    parseInt(form.numReviews)      || 0,
-        description:   form.description.trim(),
-        isFeatured:    form.isFeatured,
-        imageUrl,
-        images: imageUrl ? [imageUrl] : [],
-        weights: weights
-          .filter(w => w.label)
-          .map(w => ({
-            label:         w.label,
-            price:         parseFloat(w.price)         || parseFloat(form.price)         || 0,
-            discountPrice: parseFloat(w.discountPrice) || parseFloat(form.discountPrice) || parseFloat(w.price) || 0,
-          })),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      const payload = {
+        name: form.name.trim(),
+        price: parseFloat(form.price) || 0,
+        original_price: parseFloat(form.price) || 0,
+        discount: Math.round(((parseFloat(form.price) - (parseFloat(form.discountPrice) || parseFloat(form.price))) / parseFloat(form.price)) * 100) || 0,
+        category: form.category,
+        image_url: imageUrl,
+        description: form.description.trim(),
+        stock: parseInt(form.stock) || 0,
+        slug, isFeatured: form.isFeatured,
+        rating: parseFloat(form.rating) || 4.5,
+        numReviews: parseInt(form.numReviews) || 0,
+        weights: weights.filter(w => w.label).map(w => ({
+          label: w.label,
+          price: parseFloat(w.price) || parseFloat(form.price) || 0,
+          discountPrice: parseFloat(w.discountPrice) || parseFloat(w.price) || 0,
+        }))
       };
 
-      await setDoc(doc(db, 'products', slug), data);
+      const isEdit = view === 'edit' && editTarget;
+      const url = isEdit ? `${API}/api/products/${editTarget.id}` : `${API}/api/products`;
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const r = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer dev_admin' },
+        body: JSON.stringify(payload)
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Failed to save product');
 
       setStatus('done');
-
-      // Reset after 3s
-      setTimeout(() => {
-        setStatus('idle');
-        setForm({ name:'', slug:'', category:'biscuits', price:'', discountPrice:'', stock:'100', rating:'4.5', numReviews:'0', description:'', isFeatured:false });
-        setWeights([{ label:'100g', price:'', discountPrice:'' }]);
-        setImageFile(null);
-        setImagePreview(null);
-        setUploadProgress(0);
-      }, 3000);
-
+      await fetchProducts();
+      setTimeout(() => { setView('list'); setStatus('idle'); }, 1500);
     } catch (err) {
-      console.error('Admin upload error:', err);
-      setErrorMsg(err.message || 'Something went wrong. Check the console.');
+      setErrorMsg(err.message);
       setStatus('error');
+    }
+  };
+
+  /* ─── Delete ─── */
+  const handleDelete = async (p) => {
+    if (!confirm(`Delete "${p.name}"? This cannot be undone.`)) return;
+    try {
+      await fetch(`${API}/api/products/${p.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer dev_admin' }
+      });
+      await fetchProducts();
+    } catch {
+      alert('Delete failed. Check console.');
     }
   };
 
   const busy = status === 'uploading' || status === 'saving';
 
+  /* ═══════════════════════════════════════════════════
+     RENDER
+  ═══════════════════════════════════════════════════ */
   return (
     <>
       <Head>
-        <title>Admin — Add Product | EcoMart</title>
+        <title>Admin Panel — Curify</title>
         <meta name="robots" content="noindex" />
       </Head>
 
       <div className="ap">
 
-        {/* Header */}
-        <header className="ap-hdr">
-          <div className="ap-hdr-left">
-            <span className="ap-logo">🌿</span>
-            <span className="ap-title">EcoMart Admin</span>
+        {/* ── Sidebar ── */}
+        <aside className="sidebar">
+          <div className="sb-brand">
+            <span className="sb-leaf">🌿</span>
+            <div>
+              <div className="sb-name">Curify</div>
+              <div className="sb-role">Admin Panel</div>
+            </div>
           </div>
-          <button onClick={() => router.push('/')} className="ap-back">← Back to Store</button>
-        </header>
 
+          <nav className="sb-nav">
+            <button className={`sb-link ${view==='list'?'active':''}`} onClick={() => setView('list')}>
+              <span>📦</span> Products
+            </button>
+            <button className={`sb-link ${view==='add'?'active':''}`} onClick={openAdd}>
+              <span>➕</span> Add Product
+            </button>
+            <button className="sb-link" onClick={() => router.push('/')}>
+              <span>🏠</span> View Store
+            </button>
+          </nav>
+
+          {/* Stats */}
+          <div className="sb-stats">
+            <div className="sb-stat"><span>{stats.total}</span><label>Products</label></div>
+            <div className="sb-stat"><span>{stats.featured}</span><label>Featured</label></div>
+            <div className="sb-stat out"><span>{stats.outOfStock}</span><label>Out of Stock</label></div>
+            <div className="sb-stat"><span>{stats.categories}</span><label>Categories</label></div>
+          </div>
+        </aside>
+
+        {/* ── Main ── */}
         <main className="ap-main">
-          <h1 className="ap-h1">Add New Product</h1>
-          <p className="ap-desc">Upload product image + details — saved directly to Firebase.</p>
 
-          {/* Status banners */}
-          {status === 'done' && (
-            <div className="banner banner-ok">
-              ✅ Product <strong>{form.name || 'saved'}</strong> published to Firebase!
-            </div>
-          )}
-          {(status === 'error' || errorMsg) && (
-            <div className="banner banner-err">
-              <strong>⚠️ Error</strong>
-              <pre className="err-pre">{errorMsg}</pre>
-            </div>
-          )}
+          {/* ── LIST VIEW ── */}
+          {view === 'list' && (
+            <>
+              <div className="page-hdr">
+                <div>
+                  <h1 className="page-title">Products</h1>
+                  <p className="page-sub">{products.length} total products across {stats.categories} categories</p>
+                </div>
+                <button className="btn-primary" onClick={openAdd}>+ Add Product</button>
+              </div>
 
-          <form onSubmit={handleSubmit} className="ap-form">
+              <div className="search-bar">
+                <span className="search-icon">🔍</span>
+                <input
+                  type="text" placeholder="Search by name or category…"
+                  value={search} onChange={e => setSearch(e.target.value)}
+                />
+                {search && <button className="clear-search" onClick={() => setSearch('')}>✕</button>}
+              </div>
 
-            {/* ── Image ── */}
-            <section className="sec">
-              <h2 className="sec-title">📷 Product Image</h2>
-              <div
-                className={`drop-zone ${dragging ? 'drag-over' : ''}`}
-                onClick={() => fileRef.current.click()}
-                onDragOver={e => { e.preventDefault(); setDragging(true); }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={onDrop}
-              >
-                {imagePreview
-                  ? <img src={imagePreview} alt="preview" className="img-prev" />
-                  : (
-                    <div className="drop-hint">
-                      <div className="drop-icon">📷</div>
-                      <p className="drop-text">Click or drag & drop image here</p>
-                      <p className="drop-sub">JPG · PNG · WebP · max 10 MB</p>
+              {loading ? (
+                <div className="loading-wrap">
+                  <div className="spinner" /><span>Loading products…</span>
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="empty-state">
+                  <div style={{fontSize:'3rem'}}>📦</div>
+                  <p>{search ? `No products matching "${search}"` : 'No products yet. Click Add Product to get started.'}</p>
+                </div>
+              ) : (
+                <div className="product-grid">
+                  {filtered.map(p => (
+                    <div key={p.id} className="p-card">
+                      <div className="p-img-wrap">
+                        {p.image_url || p.imageUrl
+                          ? <img src={p.image_url || p.imageUrl} alt={p.name} className="p-img" />
+                          : <div className="p-img-ph">🌿</div>
+                        }
+                        {(p.isFeatured || p.is_featured) && <span className="p-badge featured">⭐ Featured</span>}
+                        {(p.stock || 0) === 0 && <span className="p-badge oos">Out of Stock</span>}
+                      </div>
+                      <div className="p-info">
+                        <div className="p-cat">{p.category}</div>
+                        <div className="p-name" title={p.name}>{p.name}</div>
+                        <div className="p-meta">
+                          <span className="p-price">₹{p.price}</span>
+                          <span className="p-stock">Stock: {p.stock ?? '—'}</span>
+                          <span className="p-rating">⭐ {p.rating || '—'}</span>
+                        </div>
+                      </div>
+                      <div className="p-actions">
+                        <button className="btn-edit" onClick={() => openEdit(p)}>✏️ Edit</button>
+                        <button className="btn-delete" onClick={() => handleDelete(p)}>🗑️ Delete</button>
+                      </div>
                     </div>
-                  )
-                }
-              </div>
-              <input ref={fileRef} type="file" accept="image/*"
-                onChange={e => pickImage(e.target.files[0])}
-                style={{ display:'none' }} />
-
-              {status === 'uploading' && (
-                <div className="prog-wrap">
-                  <div className="prog-bar" style={{ width: `${uploadProgress}%` }} />
-                  <span className="prog-txt">{uploadProgress}%</span>
+                  ))}
                 </div>
               )}
-              {imageFile && status !== 'uploading' && (
-                <p className="img-name">📎 {imageFile.name}</p>
+            </>
+          )}
+
+          {/* ── ADD / EDIT FORM ── */}
+          {(view === 'add' || view === 'edit') && (
+            <>
+              <div className="page-hdr">
+                <div>
+                  <h1 className="page-title">{view === 'edit' ? `Edit: ${editTarget?.name}` : 'Add New Product'}</h1>
+                  <p className="page-sub">{view === 'edit' ? 'Update product details below' : 'Fill in details and publish'}</p>
+                </div>
+                <button className="btn-ghost" onClick={() => setView('list')}>← Back to List</button>
+              </div>
+
+              {status === 'done' && (
+                <div className="banner banner-ok">✅ Product {view === 'edit' ? 'updated' : 'published'} successfully!</div>
               )}
-            </section>
+              {(status === 'error' || errorMsg) && (
+                <div className="banner banner-err">⚠️ {errorMsg}</div>
+              )}
 
-            {/* ── Basic Info ── */}
-            <section className="sec">
-              <h2 className="sec-title">📝 Product Details</h2>
-              <div className="grid2">
-                <div className="fg span2">
-                  <label>Product Name *</label>
-                  <input name="name" value={form.name} onChange={handleField}
-                    placeholder="e.g. Ragi Cookies" required />
-                </div>
-                <div className="fg">
-                  <label>URL Slug (auto-filled)</label>
-                  <input name="slug" value={form.slug} onChange={handleField}
-                    placeholder="ragi-cookies" />
-                </div>
-                <div className="fg">
-                  <label>Category *</label>
-                  <select name="category" value={form.category} onChange={handleField}>
-                    {CATEGORIES.map(c => (
-                      <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="fg span2">
-                  <label>Description</label>
-                  <textarea name="description" value={form.description} onChange={handleField}
-                    rows={3} placeholder="Short description of the product..." />
-                </div>
-                <div className="fg">
-                  <label>Mark as Featured?</label>
-                  <label className="tog">
-                    <input type="checkbox" name="isFeatured" checked={form.isFeatured} onChange={handleField} />
-                    <span className="tog-track" />
-                    <span className="tog-lbl">{form.isFeatured ? '⭐ Yes' : 'No'}</span>
-                  </label>
-                </div>
-              </div>
-            </section>
+              <form onSubmit={handleSubmit} className="ap-form">
 
-            {/* ── Pricing ── */}
-            <section className="sec">
-              <h2 className="sec-title">💰 Pricing & Stock</h2>
-              <div className="grid3">
-                <div className="fg">
-                  <label>Base Price (₹) *</label>
-                  <input type="number" name="price" value={form.price} onChange={handleField}
-                    placeholder="120" min="0" step="0.01" required />
-                </div>
-                <div className="fg">
-                  <label>Discount Price (₹)</label>
-                  <input type="number" name="discountPrice" value={form.discountPrice} onChange={handleField}
-                    placeholder="99" min="0" step="0.01" />
-                </div>
-                <div className="fg">
-                  <label>Stock Qty</label>
-                  <input type="number" name="stock" value={form.stock} onChange={handleField}
-                    placeholder="100" min="0" />
-                </div>
-                <div className="fg">
-                  <label>Rating (1–5)</label>
-                  <input type="number" name="rating" value={form.rating} onChange={handleField}
-                    step="0.1" min="1" max="5" />
-                </div>
-                <div className="fg">
-                  <label>No. of Reviews</label>
-                  <input type="number" name="numReviews" value={form.numReviews} onChange={handleField}
-                    min="0" />
-                </div>
-              </div>
-            </section>
-
-            {/* ── Weight Variants ── */}
-            <section className="sec">
-              <h2 className="sec-title">⚖️ Weight / Size Variants</h2>
-              <p className="sec-sub">Add different weight options (e.g. 100g, 250g, 500g)</p>
-              {weights.map((w, i) => (
-                <div key={i} className="w-row">
-                  <div className="fg">
-                    <label>Label</label>
-                    <input value={w.label}
-                      onChange={e => handleWeight(i, 'label', e.target.value)}
-                      placeholder="e.g. 250g" />
+                {/* Image */}
+                <div className="sec">
+                  <h2 className="sec-title">📷 Product Image</h2>
+                  <div
+                    className={`drop-zone ${dragging ? 'drag-over' : ''}`}
+                    onClick={() => fileRef.current.click()}
+                    onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={onDrop}
+                  >
+                    {imagePreview
+                      ? <img src={imagePreview} alt="preview" className="img-prev" />
+                      : <div className="drop-hint">
+                          <div className="drop-icon">📷</div>
+                          <p className="drop-text">Click or drag & drop image here</p>
+                          <p className="drop-sub">JPG · PNG · WebP · max 10 MB</p>
+                        </div>
+                    }
                   </div>
-                  <div className="fg">
-                    <label>MRP (₹)</label>
-                    <input type="number" value={w.price}
-                      onChange={e => handleWeight(i, 'price', e.target.value)}
-                      placeholder="120" min="0" />
-                  </div>
-                  <div className="fg">
-                    <label>Sale Price (₹)</label>
-                    <input type="number" value={w.discountPrice}
-                      onChange={e => handleWeight(i, 'discountPrice', e.target.value)}
-                      placeholder="99" min="0" />
-                  </div>
-                  {weights.length > 1 && (
-                    <button type="button" className="rm-btn" onClick={() => dropWeight(i)}>✕</button>
+                  <input ref={fileRef} type="file" accept="image/*"
+                    onChange={e => pickImage(e.target.files[0])} style={{ display:'none' }} />
+                  {status === 'uploading' && (
+                    <div className="prog-wrap">
+                      <div className="prog-bar" style={{ width: `${uploadProgress}%` }} />
+                      <span className="prog-txt">{uploadProgress}%</span>
+                    </div>
+                  )}
+                  {form.image_url && !imageFile && (
+                    <p className="img-name">📎 Current image saved</p>
                   )}
                 </div>
-              ))}
-              <button type="button" className="add-btn" onClick={addWeight}>
-                + Add another size
-              </button>
-            </section>
 
-            {/* ── Submit ── */}
-            <div className="submit-row">
-              <button type="submit" className="submit-btn" disabled={busy}>
-                {status === 'uploading'
-                  ? `⬆️ Uploading image… ${uploadProgress}%`
-                  : status === 'saving'
-                  ? '💾 Saving to Firebase…'
-                  : '🚀 Publish Product'}
-              </button>
-            </div>
+                {/* Basic Info */}
+                <div className="sec">
+                  <h2 className="sec-title">📝 Product Details</h2>
+                  <div className="grid2">
+                    <div className="fg span2">
+                      <label>Product Name *</label>
+                      <input name="name" value={form.name} onChange={handleField} placeholder="e.g. Ragi Cookies" required />
+                    </div>
+                    <div className="fg">
+                      <label>URL Slug (auto-filled)</label>
+                      <input name="slug" value={form.slug} onChange={handleField} placeholder="ragi-cookies" />
+                    </div>
+                    <div className="fg">
+                      <label>Category *</label>
+                      <select name="category" value={form.category} onChange={handleField}>
+                        {CATEGORIES.map(c => (
+                          <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="fg span2">
+                      <label>Description</label>
+                      <textarea name="description" value={form.description} onChange={handleField}
+                        rows={3} placeholder="Short description…" />
+                    </div>
+                    <div className="fg">
+                      <label>Mark as Featured?</label>
+                      <label className="tog">
+                        <input type="checkbox" name="isFeatured" checked={form.isFeatured} onChange={handleField} />
+                        <span className="tog-track" />
+                        <span className="tog-lbl">{form.isFeatured ? '⭐ Yes' : 'No'}</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
 
-          </form>
+                {/* Pricing & Stock */}
+                <div className="sec">
+                  <h2 className="sec-title">💰 Pricing & Stock</h2>
+                  <div className="grid3">
+                    <div className="fg">
+                      <label>Base Price (₹) *</label>
+                      <input type="number" name="price" value={form.price} onChange={handleField} placeholder="120" min="0" step="0.01" required />
+                    </div>
+                    <div className="fg">
+                      <label>Discount Price (₹)</label>
+                      <input type="number" name="discountPrice" value={form.discountPrice} onChange={handleField} placeholder="99" min="0" step="0.01" />
+                    </div>
+                    <div className="fg">
+                      <label>Stock Qty</label>
+                      <input type="number" name="stock" value={form.stock} onChange={handleField} placeholder="100" min="0" />
+                    </div>
+                    <div className="fg">
+                      <label>Rating (1–5)</label>
+                      <input type="number" name="rating" value={form.rating} onChange={handleField} step="0.1" min="1" max="5" />
+                    </div>
+                    <div className="fg">
+                      <label>No. of Reviews</label>
+                      <input type="number" name="numReviews" value={form.numReviews} onChange={handleField} min="0" />
+                    </div>
+                  </div>
+                </div>
 
-          {/* Firebase Rules helper */}
-          <div className="help-box">
-            <h3>⚠️ If upload fails with "permission denied"</h3>
-            <p>Go to <strong>Firebase Console → Storage → Rules</strong> and paste:</p>
-            <pre className="rules-pre">{`rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read: if true;
-      allow write: if true;
-    }
-  }
-}`}</pre>
-            <p>Also go to <strong>Firestore → Rules</strong>:</p>
-            <pre className="rules-pre">{`rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
-    }
-  }
-}`}</pre>
-            <p style={{color:'#f85149', fontSize:'0.8rem', marginTop:8}}>
-              ⚠️ These open rules are for testing only. Lock them down before going live.
-            </p>
-          </div>
+                {/* Weight Variants */}
+                <div className="sec">
+                  <h2 className="sec-title">⚖️ Weight / Size Variants</h2>
+                  <p className="sec-sub">Add different weight options (e.g. 100g, 250g, 500g)</p>
+                  {weights.map((w, i) => (
+                    <div key={i} className="w-row">
+                      <div className="fg">
+                        <label>Label</label>
+                        <input value={w.label} onChange={e => handleWeight(i, 'label', e.target.value)} placeholder="e.g. 250g" />
+                      </div>
+                      <div className="fg">
+                        <label>MRP (₹)</label>
+                        <input type="number" value={w.price} onChange={e => handleWeight(i, 'price', e.target.value)} placeholder="120" min="0" />
+                      </div>
+                      <div className="fg">
+                        <label>Sale Price (₹)</label>
+                        <input type="number" value={w.discountPrice} onChange={e => handleWeight(i, 'discountPrice', e.target.value)} placeholder="99" min="0" />
+                      </div>
+                      {weights.length > 1 && (
+                        <button type="button" className="rm-btn" onClick={() => setWeights(ws => ws.filter((_, idx) => idx !== i))}>✕</button>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button" className="add-btn" onClick={() => setWeights(ws => [...ws, { label:'', price:'', discountPrice:'' }])}>
+                    + Add another size
+                  </button>
+                </div>
+
+                {/* Submit */}
+                <div className="submit-row">
+                  <button type="button" className="btn-ghost-lg" onClick={() => setView('list')} disabled={busy}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="submit-btn" disabled={busy}>
+                    {status === 'uploading' ? `⬆️ Uploading… ${uploadProgress}%`
+                     : status === 'saving' ? '💾 Saving…'
+                     : view === 'edit' ? '✅ Save Changes'
+                     : '🚀 Publish Product'}
+                  </button>
+                </div>
+
+              </form>
+            </>
+          )}
 
         </main>
       </div>
 
       <style jsx>{`
-        * { box-sizing: border-box; }
-        .ap { min-height:100vh; background:#0d1117; color:#e6edf3; font-family:'Inter','Segoe UI',sans-serif; }
-
-        /* Header */
-        .ap-hdr {
-          display:flex; align-items:center; justify-content:space-between;
-          padding:16px 32px; background:#161b22; border-bottom:1px solid #30363d;
-          position:sticky; top:0; z-index:10;
+        * { box-sizing:border-box; margin:0; padding:0; }
+        .ap {
+          display:flex; min-height:100vh;
+          background:#0d1117; color:#e6edf3;
+          font-family:'Inter','Segoe UI',sans-serif;
         }
-        .ap-hdr-left { display:flex; align-items:center; gap:10px; }
-        .ap-logo  { font-size:1.5rem; }
-        .ap-title { font-size:1.1rem; font-weight:700; color:#3fb950; }
-        .ap-back  {
+
+        /* ── Sidebar ── */
+        .sidebar {
+          width:240px; flex-shrink:0;
+          background:#161b22; border-right:1px solid #30363d;
+          padding:24px 0; position:sticky; top:0; height:100vh; overflow-y:auto;
+        }
+        .sb-brand {
+          display:flex; align-items:center; gap:10px;
+          padding:0 20px 24px; border-bottom:1px solid #30363d;
+        }
+        .sb-leaf { font-size:2rem; }
+        .sb-name { font-weight:800; font-size:1.1rem; color:#3fb950; }
+        .sb-role { font-size:0.72rem; color:#8b949e; text-transform:uppercase; letter-spacing:0.06em; }
+
+        .sb-nav { padding:16px 12px; display:flex; flex-direction:column; gap:4px; }
+        .sb-link {
+          display:flex; align-items:center; gap:10px;
+          padding:10px 12px; border-radius:8px; border:none;
+          background:none; color:#8b949e; cursor:pointer;
+          font-size:0.88rem; font-family:inherit; text-align:left; width:100%;
+          transition:all 0.15s;
+        }
+        .sb-link:hover { background:#21262d; color:#e6edf3; }
+        .sb-link.active { background:#1a3a21; color:#3fb950; font-weight:600; }
+
+        .sb-stats {
+          margin:16px 12px 0;
+          display:grid; grid-template-columns:1fr 1fr; gap:8px;
+          border-top:1px solid #30363d; padding-top:16px;
+        }
+        .sb-stat {
+          background:#0d1117; border:1px solid #30363d;
+          border-radius:8px; padding:10px 8px; text-align:center;
+        }
+        .sb-stat span { display:block; font-size:1.3rem; font-weight:700; color:#3fb950; }
+        .sb-stat.out span { color:#f85149; }
+        .sb-stat label { font-size:0.68rem; color:#8b949e; text-transform:uppercase; margin-top:2px; }
+
+        /* ── Main ── */
+        .ap-main { flex:1; padding:32px; overflow-y:auto; max-height:100vh; }
+
+        .page-hdr {
+          display:flex; justify-content:space-between; align-items:flex-start;
+          margin-bottom:24px; gap:16px; flex-wrap:wrap;
+        }
+        .page-title { font-size:1.8rem; font-weight:800; }
+        .page-sub   { color:#8b949e; font-size:0.88rem; margin-top:4px; }
+
+        /* Buttons */
+        .btn-primary {
+          background:linear-gradient(135deg,#1a5c38,#3fb950);
+          color:#fff; border:none; padding:10px 22px;
+          border-radius:9px; font-size:0.88rem; font-weight:700;
+          cursor:pointer; transition:all 0.2s; white-space:nowrap;
+          box-shadow:0 2px 12px rgba(63,185,80,0.3);
+        }
+        .btn-primary:hover { transform:translateY(-1px); box-shadow:0 4px 20px rgba(63,185,80,0.4); }
+
+        .btn-ghost {
           background:none; border:1px solid #30363d; color:#8b949e;
-          padding:8px 16px; border-radius:6px; cursor:pointer; font-size:0.85rem;
-          transition:all 0.2s;
+          padding:10px 18px; border-radius:9px; cursor:pointer;
+          font-size:0.88rem; transition:all 0.2s; font-family:inherit;
         }
-        .ap-back:hover { background:#21262d; color:#e6edf3; }
+        .btn-ghost:hover { background:#21262d; color:#e6edf3; }
 
-        /* Main */
-        .ap-main { max-width:820px; margin:0 auto; padding:40px 20px 80px; }
-        .ap-h1   { font-size:2rem; font-weight:800; margin:0 0 6px; }
-        .ap-desc { color:#8b949e; margin:0 0 28px; font-size:0.95rem; }
+        .btn-ghost-lg {
+          background:none; border:1px solid #30363d; color:#8b949e;
+          padding:14px 32px; border-radius:10px; cursor:pointer;
+          font-size:0.95rem; transition:all 0.2s; font-family:inherit;
+        }
+        .btn-ghost-lg:hover { background:#21262d; color:#e6edf3; }
 
-        /* Banners */
-        .banner { padding:14px 18px; border-radius:10px; margin-bottom:24px; font-size:0.95rem; }
-        .banner-ok  { background:#0d2b1a; border:1px solid #3fb950; color:#3fb950; }
-        .banner-err { background:#2d1010; border:1px solid #f85149; color:#f85149; }
-        .err-pre { margin:8px 0 0; white-space:pre-wrap; font-size:0.8rem; font-family:monospace; background:#1a0a0a; padding:10px; border-radius:6px; }
+        /* Search */
+        .search-bar {
+          display:flex; align-items:center; gap:10px;
+          background:#161b22; border:1px solid #30363d; border-radius:10px;
+          padding:10px 16px; margin-bottom:24px;
+        }
+        .search-icon { font-size:1rem; }
+        .search-bar input {
+          flex:1; background:none; border:none; outline:none;
+          color:#e6edf3; font-size:0.95rem; font-family:inherit;
+        }
+        .search-bar input::placeholder { color:#8b949e; }
+        .clear-search {
+          background:none; border:none; color:#8b949e;
+          cursor:pointer; font-size:0.85rem; padding:2px 4px;
+        }
+
+        /* States */
+        .loading-wrap { display:flex; align-items:center; gap:14px; padding:40px; color:#8b949e; }
+        .spinner {
+          width:24px; height:24px; border:3px solid #30363d;
+          border-top-color:#3fb950; border-radius:50%; animation:spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        .empty-state { text-align:center; padding:60px 20px; color:#8b949e; }
+        .empty-state div { margin-bottom:12px; }
+
+        /* Product Grid */
+        .product-grid {
+          display:grid;
+          grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+          gap:16px;
+        }
+        .p-card {
+          background:#161b22; border:1px solid #30363d; border-radius:12px;
+          overflow:hidden; transition:all 0.2s;
+        }
+        .p-card:hover { border-color:#3fb950; box-shadow:0 4px 24px rgba(63,185,80,0.1); transform:translateY(-2px); }
+
+        .p-img-wrap { position:relative; height:160px; background:#0d1117; overflow:hidden; }
+        .p-img { width:100%; height:100%; object-fit:cover; }
+        .p-img-ph {
+          width:100%; height:100%;
+          display:flex; align-items:center; justify-content:center; font-size:3.5rem;
+        }
+        .p-badge {
+          position:absolute; top:8px; left:8px;
+          font-size:0.68rem; font-weight:700; padding:3px 8px; border-radius:20px;
+        }
+        .p-badge.featured { background:#1a3a21; color:#3fb950; }
+        .p-badge.oos { background:#2d1010; color:#f85149; }
+
+        .p-info { padding:12px 14px; }
+        .p-cat { font-size:0.7rem; color:#8b949e; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px; }
+        .p-name { font-size:0.9rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:8px; }
+        .p-meta { display:flex; gap:10px; flex-wrap:wrap; font-size:0.78rem; }
+        .p-price { color:#3fb950; font-weight:700; }
+        .p-stock { color:#8b949e; }
+        .p-rating { color:#f0c040; }
+
+        .p-actions {
+          display:flex; gap:8px; padding:10px 14px;
+          border-top:1px solid #21262d;
+        }
+        .btn-edit {
+          flex:1; padding:8px; background:#1c2128;
+          border:1px solid #30363d; color:#e6edf3;
+          border-radius:7px; cursor:pointer; font-size:0.8rem;
+          transition:all 0.15s; font-family:inherit;
+        }
+        .btn-edit:hover { background:#21262d; border-color:#3fb950; color:#3fb950; }
+        .btn-delete {
+          flex:1; padding:8px; background:#1c1010;
+          border:1px solid #30363d; color:#e6edf3;
+          border-radius:7px; cursor:pointer; font-size:0.8rem;
+          transition:all 0.15s; font-family:inherit;
+        }
+        .btn-delete:hover { background:#2d1010; border-color:#f85149; color:#f85149; }
 
         /* Form */
-        .ap-form { display:flex; flex-direction:column; gap:24px; }
+        .ap-form { display:flex; flex-direction:column; gap:20px; max-width:840px; }
+        .sec { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:22px; }
+        .sec-title { font-size:0.95rem; font-weight:700; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid #30363d; }
+        .sec-sub { color:#8b949e; font-size:0.82rem; margin:-6px 0 14px; }
 
-        /* Sections */
-        .sec { background:#161b22; border:1px solid #30363d; border-radius:14px; padding:24px; }
-        .sec-title { font-size:1rem; font-weight:700; margin:0 0 16px; padding-bottom:12px; border-bottom:1px solid #30363d; }
-        .sec-sub   { color:#8b949e; font-size:0.85rem; margin:-8px 0 16px; }
-
-        /* Grids */
-        .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-        .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+        .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+        .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
         .span2 { grid-column:1/-1; }
 
-        /* Field group */
-        .fg { display:flex; flex-direction:column; gap:6px; }
-        .fg label { font-size:0.75rem; font-weight:600; color:#8b949e; text-transform:uppercase; letter-spacing:0.06em; }
-        .fg input, .fg select, .fg textarea {
+        .fg { display:flex; flex-direction:column; gap:5px; }
+        .fg label { font-size:0.72rem; font-weight:600; color:#8b949e; text-transform:uppercase; letter-spacing:0.06em; }
+        .fg input,.fg select,.fg textarea {
           background:#0d1117; border:1px solid #30363d; color:#e6edf3;
-          border-radius:8px; padding:10px 14px; font-size:0.9rem; font-family:inherit;
-          transition:border-color 0.2s; width:100%;
+          border-radius:8px; padding:10px 12px; font-size:0.88rem; font-family:inherit; width:100%;
+          transition:border-color 0.15s;
         }
-        .fg input:focus, .fg select:focus, .fg textarea:focus {
+        .fg input:focus,.fg select:focus,.fg textarea:focus {
           outline:none; border-color:#3fb950; box-shadow:0 0 0 3px rgba(63,185,80,0.1);
         }
         .fg textarea { resize:vertical; }
 
-        /* Drop zone */
         .drop-zone {
           border:2px dashed #30363d; border-radius:12px;
-          min-height:200px; display:flex; align-items:center; justify-content:center;
+          min-height:180px; display:flex; align-items:center; justify-content:center;
           cursor:pointer; transition:all 0.2s; overflow:hidden;
         }
-        .drop-zone:hover, .drag-over { border-color:#3fb950; background:rgba(63,185,80,0.04); }
+        .drop-zone:hover,.drag-over { border-color:#3fb950; background:rgba(63,185,80,0.04); }
         .drop-hint { text-align:center; padding:20px; }
-        .drop-icon { font-size:3rem; margin-bottom:8px; }
-        .drop-text { color:#e6edf3; font-size:1rem; margin:0 0 4px; }
-        .drop-sub  { color:#8b949e; font-size:0.8rem; margin:0; }
-        .img-prev  { max-height:240px; max-width:100%; object-fit:contain; border-radius:8px; }
-        .img-name  { color:#8b949e; font-size:0.8rem; margin:8px 0 0; }
+        .drop-icon { font-size:2.5rem; margin-bottom:8px; }
+        .drop-text { color:#e6edf3; font-size:0.95rem; margin:0 0 4px; }
+        .drop-sub { color:#8b949e; font-size:0.78rem; }
+        .img-prev { max-height:220px; max-width:100%; object-fit:contain; border-radius:8px; }
+        .img-name { color:#8b949e; font-size:0.78rem; margin-top:8px; }
 
-        /* Progress */
         .prog-wrap {
           display:flex; align-items:center; gap:10px; margin-top:12px;
           background:#0d1117; border-radius:20px; padding:4px 12px;
           border:1px solid #30363d;
         }
-        .prog-bar {
-          height:6px; background:linear-gradient(90deg,#3fb950,#58a6ff);
-          border-radius:3px; transition:width 0.3s ease; min-width:4px;
-        }
-        .prog-txt { color:#8b949e; font-size:0.8rem; white-space:nowrap; }
+        .prog-bar { height:6px; background:linear-gradient(90deg,#3fb950,#58a6ff); border-radius:3px; transition:width 0.3s; min-width:4px; }
+        .prog-txt { color:#8b949e; font-size:0.78rem; white-space:nowrap; }
 
-        /* Toggle */
-        .tog { display:flex; align-items:center; gap:12px; cursor:pointer; margin-top:4px; user-select:none; }
+        .tog { display:flex; align-items:center; gap:10px; cursor:pointer; margin-top:4px; user-select:none; }
         .tog input { display:none; }
-        .tog-track {
-          width:44px; height:24px; background:#30363d; border-radius:12px;
-          position:relative; transition:background 0.25s; flex-shrink:0;
-        }
-        .tog-track::after {
-          content:''; position:absolute; top:3px; left:3px;
-          width:18px; height:18px; background:#6e7681; border-radius:50%;
-          transition:transform 0.25s, background 0.25s;
-        }
+        .tog-track { width:44px; height:24px; background:#30363d; border-radius:12px; position:relative; transition:background 0.2s; flex-shrink:0; }
+        .tog-track::after { content:''; position:absolute; top:3px; left:3px; width:18px; height:18px; background:#6e7681; border-radius:50%; transition:transform 0.2s, background 0.2s; }
         .tog input:checked ~ .tog-track { background:#1a5c38; }
         .tog input:checked ~ .tog-track::after { transform:translateX(20px); background:#3fb950; }
-        .tog-lbl { color:#e6edf3; font-size:0.9rem; }
+        .tog-lbl { color:#e6edf3; font-size:0.88rem; }
 
-        /* Weight rows */
-        .w-row {
-          display:grid; grid-template-columns:1fr 1fr 1fr auto;
-          gap:12px; align-items:end;
-          padding:12px 0; border-bottom:1px solid #21262d;
-        }
-        .rm-btn {
-          width:36px; height:36px; background:#2d1010; border:1px solid #f85149;
-          color:#f85149; border-radius:7px; cursor:pointer; font-size:0.85rem;
-          transition:all 0.2s; align-self:flex-end;
-        }
+        .w-row { display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:10px; align-items:end; padding:10px 0; border-bottom:1px solid #21262d; }
+        .rm-btn { width:34px; height:34px; background:#2d1010; border:1px solid #f85149; color:#f85149; border-radius:7px; cursor:pointer; align-self:flex-end; transition:all 0.2s; }
         .rm-btn:hover { background:#f85149; color:#fff; }
-        .add-btn {
-          margin-top:14px; width:100%; padding:10px;
-          background:none; border:1.5px dashed #30363d; color:#8b949e;
-          border-radius:8px; cursor:pointer; font-size:0.85rem; transition:all 0.2s;
-        }
+        .add-btn { margin-top:12px; width:100%; padding:10px; background:none; border:1.5px dashed #30363d; color:#8b949e; border-radius:8px; cursor:pointer; font-size:0.83rem; transition:all 0.2s; }
         .add-btn:hover { border-color:#3fb950; color:#3fb950; }
 
-        /* Submit */
-        .submit-row { display:flex; justify-content:center; }
+        .submit-row { display:flex; gap:12px; justify-content:flex-end; }
         .submit-btn {
           background:linear-gradient(135deg,#1a5c38,#3fb950);
-          color:#fff; border:none; padding:16px 48px;
-          border-radius:12px; font-size:1.05rem; font-weight:700;
-          cursor:pointer; transition:all 0.25s;
-          box-shadow:0 4px 24px rgba(63,185,80,0.35);
-          width:100%; max-width:400px;
+          color:#fff; border:none; padding:14px 40px;
+          border-radius:10px; font-size:1rem; font-weight:700;
+          cursor:pointer; transition:all 0.2s;
+          box-shadow:0 4px 20px rgba(63,185,80,0.3);
         }
-        .submit-btn:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 8px 32px rgba(63,185,80,0.45); }
-        .submit-btn:disabled { opacity:0.55; cursor:not-allowed; transform:none; }
+        .submit-btn:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 6px 28px rgba(63,185,80,0.4); }
+        .submit-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
 
-        /* Help box */
-        .help-box {
-          margin-top:48px; background:#161b22; border:1px solid #30363d;
-          border-radius:14px; padding:24px;
-        }
-        .help-box h3 { margin:0 0 10px; font-size:0.95rem; color:#e6edf3; }
-        .help-box p  { margin:10px 0 6px; color:#8b949e; font-size:0.85rem; }
-        .rules-pre {
-          background:#0d1117; border:1px solid #30363d; border-radius:8px;
-          padding:14px; font-size:0.78rem; font-family:monospace;
-          color:#e6edf3; white-space:pre; overflow-x:auto;
-        }
+        .banner { padding:12px 16px; border-radius:10px; margin-bottom:20px; font-size:0.9rem; }
+        .banner-ok  { background:#0d2b1a; border:1px solid #3fb950; color:#3fb950; }
+        .banner-err { background:#2d1010; border:1px solid #f85149; color:#f85149; }
 
-        /* Responsive */
-        @media (max-width:640px) {
-          .grid2, .grid3 { grid-template-columns:1fr; }
+        @media (max-width:768px) {
+          .ap { flex-direction:column; }
+          .sidebar { width:100%; height:auto; position:relative; }
+          .sb-nav { flex-direction:row; flex-wrap:wrap; }
+          .ap-main { padding:20px 16px; max-height:none; }
+          .grid2,.grid3 { grid-template-columns:1fr; }
           .span2 { grid-column:1; }
           .w-row { grid-template-columns:1fr 1fr; }
-          .ap-main { padding:24px 16px 60px; }
-          .ap-hdr { padding:14px 16px; }
+          .product-grid { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); }
         }
       `}</style>
     </>
