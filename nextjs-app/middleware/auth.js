@@ -37,13 +37,14 @@ export function verifyAuth(req) {
       return null;
     }
 
-    const expectedIss = `https://securetoken.google.com/ecomart-6a21a`;
+    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'lunx-9a9b2';
+    const expectedIss = `https://securetoken.google.com/${projectId}`;
     if (payload.iss !== expectedIss) {
       console.warn('Token issuer mismatch:', payload.iss);
       return null;
     }
 
-    if (payload.aud !== 'ecomart-6a21a') {
+    if (payload.aud !== projectId) {
       console.warn('Token audience mismatch:', payload.aud);
       return null;
     }

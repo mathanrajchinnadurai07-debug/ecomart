@@ -1,5 +1,5 @@
 -- =============================================
--- Kurfee – Database Schema
+-- Curify – Database Schema
 -- PostgreSQL
 -- =============================================
 
@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS orders (
   status       VARCHAR(50)  DEFAULT 'pending',
   payment_id   VARCHAR(255),
   shipment_id  VARCHAR(255), -- for Shiprocket tracking
+  shiprocket_order_id VARCHAR(100), -- for Shiprocket order identification
   created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -66,6 +67,8 @@ CREATE TABLE IF NOT EXISTS reviews (
 -- Newsletter Subscribers (DPDP compliant)
 CREATE TABLE IF NOT EXISTS newsletter_subscribers (
   email      VARCHAR(255) PRIMARY KEY,
+  token      VARCHAR(100),
+  is_active  BOOLEAN      DEFAULT TRUE,
   created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );
 

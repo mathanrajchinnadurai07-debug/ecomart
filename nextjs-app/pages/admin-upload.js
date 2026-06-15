@@ -3,6 +3,7 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase/config';
+import { useCart } from '../context/CartContext';
 
 const CATEGORIES = [
   'biscuits','snacks','mushroom','chicken','mutton','dairy','beverages',
@@ -20,6 +21,19 @@ const EMPTY_FORM = {
 
 export default function AdminPanel() {
   const router = useRouter();
+  const { user, loading: authLoading } = useCart();
+
+  const isDevBypass = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+
+  useEffect(() => {
+    if (!authLoading && !isDevBypass) {
+      if (!user) {
+        router.push('/login?redirect=/admin-upload');
+      } else if (user.email !== 'curfee01@gmail.com') {
+        router.push('/');
+      }
+    }
+  }, [user, authLoading, router, isDevBypass]);
 
   /* ─── view: 'list' | 'add' | 'edit' ─── */
   const [view, setView]           = useState('list');
@@ -181,9 +195,19 @@ export default function AdminPanel() {
       const url = isEdit ? `${API}/api/products/${editTarget.id}` : `${API}/api/products`;
       const method = isEdit ? 'PUT' : 'POST';
 
+      let authHeaderValue = 'Bearer dev_admin';
+      if (user) {
+        try {
+          const idToken = await user.getIdToken();
+          authHeaderValue = `Bearer ${idToken}`;
+        } catch (tokenErr) {
+          console.error('Failed to retrieve Firebase ID token:', tokenErr);
+        }
+      }
+
       const r = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer dev_admin' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': authHeaderValue },
         body: JSON.stringify(payload)
       });
       const d = await r.json();
@@ -202,9 +226,18 @@ export default function AdminPanel() {
   const handleDelete = async (p) => {
     if (!confirm(`Delete "${p.name}"? This cannot be undone.`)) return;
     try {
+      let authHeaderValue = 'Bearer dev_admin';
+      if (user) {
+        try {
+          const idToken = await user.getIdToken();
+          authHeaderValue = `Bearer ${idToken}`;
+        } catch (tokenErr) {
+          console.error('Failed to retrieve Firebase ID token:', tokenErr);
+        }
+      }
       await fetch(`${API}/api/products/${p.id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': 'Bearer dev_admin' }
+        headers: { 'Authorization': authHeaderValue }
       });
       await fetchProducts();
     } catch {
@@ -213,6 +246,29 @@ export default function AdminPanel() {
   };
 
   const busy = status === 'uploading' || status === 'saving';
+
+  if (authLoading) {
+    return (
+      <div className="ap" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#0d1117', color: '#e6edf3', fontFamily: 'Inter, sans-serif' }}>
+        <div className="spinner" /> <span style={{ marginLeft: 15 }}>Checking admin authorization…</span>
+        <style jsx>{`
+          .spinner {
+            width: 24px; height: 24px; border: 3px solid #30363d;
+            border-top-color: #3fb950; border-radius: 50%; animation: spin 0.8s linear infinite;
+          }
+          @keyframes spin { to { transform: rotate(360deg); } }
+        `}</style>
+      </div>
+    );
+  }
+
+  if (!isDevBypass && (!user || user.email !== 'curfee01@gmail.com')) {
+    return (
+      <div className="ap" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#0d1117', color: '#e6edf3', fontFamily: 'Inter, sans-serif' }}>
+        <span>Not authorized. Redirecting…</span>
+      </div>
+    );
+  }
 
   /* ═══════════════════════════════════════════════════
      RENDER
@@ -259,6 +315,11 @@ export default function AdminPanel() {
 
         {/* ── Main ── */}
         <main className="ap-main">
+          {isDevBypass && !user && (
+            <div className="banner banner-err" style={{ marginBottom: 20 }}>
+              ⚠️ <strong>Developer Bypass Active:</strong> You are viewing this page on localhost without being logged in. In production, this page is strictly restricted to <strong>curfee01@gmail.com</strong>.
+            </div>
+          )}
 
           {/* ── LIST VIEW ── */}
           {view === 'list' && (

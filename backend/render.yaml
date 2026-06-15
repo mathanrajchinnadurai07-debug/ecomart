@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: kurfee-backend
+    name: curify-backend
     env: node
     plan: starter
     buildCommand: npm install
@@ -27,4 +27,10 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: CORS_ORIGIN
+        sync: false
+      - key: SHIPROCKET_EMAIL
+        sync: false
+      - key: SHIPROCKET_PASSWORD
+        sync: false
+      - key: RESEND_API_KEY
         sync: false

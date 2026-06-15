@@ -30,10 +30,10 @@ export default function TestPage() {
   return (
     <>
       <Head>
-        <title>Kurfee — Connection Test</title>
+        <title>Curify — Connection Test</title>
       </Head>
       <div className="test-container">
-        <h1>🔌 Kurfee Full-Stack Connection Test</h1>
+        <h1>🔌 Curify Full-Stack Connection Test</h1>
         <p className="subtitle">Checking frontend connection to Express backend on: <code>{apiUrl}</code></p>
         
         <div className="cards">

@@ -62,7 +62,7 @@ const verifyToken = async (req, res, next) => {
       uid: decoded.uid,
       email: decoded.email,
       name: decoded.name || '',
-      role: decoded.role || 'customer',   // custom claim
+      role: (decoded.role === 'admin' || decoded.email === 'curfee01@gmail.com') ? 'admin' : 'customer',
     };
 
     next();
