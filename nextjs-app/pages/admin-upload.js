@@ -23,7 +23,7 @@ export default function AdminPanel() {
   const router = useRouter();
   const { user, loading: authLoading } = useCart();
 
-  const isDevBypass = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+  const isDevBypass = false; // Bypass disabled as requested
 
   useEffect(() => {
     if (!authLoading && !isDevBypass) {
