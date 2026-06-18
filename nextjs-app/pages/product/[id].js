@@ -16,6 +16,11 @@ export default function ProductDetail() {
   const [activeTab, setActiveTab] = useState('description');
   const [mainImage, setMainImage] = useState('');
   const [localReviews, setLocalReviews] = useState([]);
+  
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
 
   // Fetch product from data
   useEffect(() => {
@@ -76,10 +81,25 @@ export default function ProductDetail() {
     }
     setMainImage(found.images?.[0] || found.image || '');
 
-    // Load any reviews saved in local storage for this product
-    const saved = JSON.parse(localStorage.getItem('curify_reviews') || '[]');
-    const filtered = saved.filter(r => r.productSlug === slug);
-    setLocalReviews(filtered);
+    // Fetch reviews from API
+    const fetchReviews = async () => {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/reviews/product/${slug}`);
+        if (res.ok) {
+          const data = await res.json();
+          setLocalReviews(data.data || []);
+        } else {
+          // fallback to local storage
+          const saved = JSON.parse(localStorage.getItem('curify_reviews') || '[]');
+          setLocalReviews(saved.filter(r => r.productSlug === slug));
+        }
+      } catch (e) {
+        // fallback
+        const saved = JSON.parse(localStorage.getItem('curify_reviews') || '[]');
+        setLocalReviews(saved.filter(r => r.productSlug === slug));
+      }
+    };
+    fetchReviews();
 
   }, [slug]);
 
@@ -123,6 +143,49 @@ export default function ProductDetail() {
     if (outOfStock) return;
     addToCart(product, selectedWeight, quantity);
     router.push('/cart');
+  };
+
+  const submitReview = async () => {
+    if (!reviewComment.trim()) {
+      addToast('Please enter a comment', 'error');
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      const { auth } = await import('../../firebase/config');
+      if (!auth.currentUser) {
+        addToast('Please log in to submit a review', 'error');
+        setSubmittingReview(false);
+        router.push('/login?redirect=' + router.asPath);
+        return;
+      }
+      
+      const token = await auth.currentUser.getIdToken();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/reviews`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ product_id: product._id || product.id, rating: reviewRating, comment: reviewComment })
+      });
+
+      if (res.ok) {
+        addToast('Review submitted successfully!', 'success');
+        setShowReviewForm(false);
+        setReviewComment('');
+        
+        // Refresh local reviews (reload page or re-fetch)
+        window.location.reload();
+      } else {
+        const err = await res.json();
+        addToast(err.error || 'Failed to submit review', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      addToast('An error occurred', 'error');
+    }
+    setSubmittingReview(false);
   };
 
   // Get related products (same category, up to 4, excluding current product)
@@ -462,6 +525,7 @@ export default function ProductDetail() {
             <button className={`pd-tab-btn ${activeTab === 'nutrition' ? 'active' : ''}`} onClick={() => setActiveTab('nutrition')}>Nutritional Info</button>
             <button className={`pd-tab-btn ${activeTab === 'farm' ? 'active' : ''}`} onClick={() => setActiveTab('farm')}>Farm Source</button>
             <button className={`pd-tab-btn ${activeTab === 'delivery' ? 'active' : ''}`} onClick={() => setActiveTab('delivery')}>Delivery & Returns</button>
+            <button className={`pd-tab-btn ${activeTab === 'reviews' ? 'active' : ''}`} onClick={() => setActiveTab('reviews')}>Reviews</button>
             <button className={`pd-tab-btn ${activeTab === 'certifications' ? 'active' : ''}`} onClick={() => setActiveTab('certifications')}>Certifications</button>
           </div>
 
@@ -590,6 +654,90 @@ export default function ProductDetail() {
                     {product.returnPolicy || 'We offer a 7-day hassle-free return window for fresh goods. Get a full replacement or refund in case of transit damages or quality shortfalls.'}
                   </p>
                 </div>
+              </div>
+            )}
+
+            {/* Reviews Content */}
+            {activeTab === 'reviews' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h4 style={{ margin: 0, color: '#1a5c38', fontWeight: '800', fontSize: '1.1rem', fontFamily: 'Poppins' }}>Customer Reviews</h4>
+                  <button 
+                    onClick={() => setShowReviewForm(!showReviewForm)}
+                    style={{ background: '#1a5c38', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}
+                  >
+                    {showReviewForm ? 'Cancel' : 'Write a Review'}
+                  </button>
+                </div>
+
+                {showReviewForm && (
+                  <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '12px', marginBottom: '24px', border: '1px solid #e2e8f0' }}>
+                    <h5 style={{ margin: '0 0 12px', fontSize: '0.95rem' }}>Rate & Review this product</h5>
+                    
+                    <div style={{ marginBottom: '16px' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#475569', display: 'block', marginBottom: '8px' }}>Your Rating</span>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {[1,2,3,4,5].map(star => (
+                          <i 
+                            key={star} 
+                            className={`fas fa-star`} 
+                            style={{ color: star <= reviewRating ? '#f59e0b' : '#cbd5e1', cursor: 'pointer', fontSize: '1.5rem' }}
+                            onClick={() => setReviewRating(star)}
+                          ></i>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: '16px' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#475569', display: 'block', marginBottom: '8px' }}>Your Comment</span>
+                      <textarea 
+                        value={reviewComment}
+                        onChange={(e) => setReviewComment(e.target.value)}
+                        placeholder="What do you think about this product?"
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', minHeight: '80px', fontFamily: 'inherit' }}
+                      />
+                    </div>
+
+                    <button 
+                      onClick={submitReview}
+                      disabled={submittingReview}
+                      style={{ background: '#e05a2b', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '8px', cursor: submittingReview ? 'not-allowed' : 'pointer', fontWeight: '600', opacity: submittingReview ? 0.7 : 1 }}
+                    >
+                      {submittingReview ? 'Submitting...' : 'Submit Review'}
+                    </button>
+                  </div>
+                )}
+
+                {localReviews.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '30px 20px', background: '#f8fafc', borderRadius: '12px' }}>
+                    <i className="fas fa-comment-dots" style={{ fontSize: '2rem', color: '#cbd5e1', marginBottom: '10px' }}></i>
+                    <p style={{ color: '#64748b', margin: 0 }}>No reviews yet. Be the first to review!</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {localReviews.map((rev, idx) => (
+                      <div key={rev.id || idx} style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#1a5c38', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.8rem' }}>
+                            {(rev.user_name || 'U')[0].toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: '600', fontSize: '0.9rem', color: '#1e293b' }}>{rev.user_name || 'Verified Buyer'}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div style={{ display: 'flex' }}>
+                                {[...Array(5)].map((_, i) => (
+                                  <i key={i} className="fas fa-star" style={{ color: i < rev.rating ? '#f59e0b' : '#cbd5e1', fontSize: '0.75rem' }}></i>
+                                ))}
+                              </div>
+                              {rev.created_at && <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>• {new Date(rev.created_at).toLocaleDateString()}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <p style={{ margin: '8px 0 0', color: '#475569', fontSize: '0.88rem', lineHeight: '1.5' }}>{rev.comment}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

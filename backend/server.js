@@ -34,12 +34,14 @@ const orderRoutes = require('./routes/orders');
 const userRoutes = require('./routes/users');
 const paymentRoutes = require('./routes/payments');
 const newsletterRoutes = require('./routes/newsletter');
+const reviewRoutes = require('./routes/reviews');
 
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/newsletter', newsletterRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

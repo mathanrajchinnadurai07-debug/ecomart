@@ -278,10 +278,51 @@ const shiprocketWebhook = async (req, res, next) => {
   }
 };
 
+// --------------- POST /api/orders/:id/return ---------------
+const returnOrder = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const { rows } = await db.query('SELECT * FROM orders WHERE id = $1', [id]);
+    if (!rows.length) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+
+    const order = rows[0];
+    if (order.status !== 'delivered') {
+      return res.status(400).json({ success: false, error: 'Only delivered orders can be returned' });
+    }
+
+    const updatedOrderQuery = await db.query(
+      'UPDATE orders SET status = $1, return_reason = $2 WHERE id = $3 RETURNING *',
+      ['return_requested', reason || 'Customer requested return', id]
+    );
+    
+    const updatedOrder = updatedOrderQuery.rows[0];
+
+    // Sync to Firestore
+    try {
+      await admin.firestore().collection('orders').doc(id.toString()).update({
+        status: 'return_requested',
+        return_reason: reason || 'Customer requested return',
+        updated_at: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (fsErr) {
+      console.error('Error syncing return request to Firestore:', fsErr);
+    }
+
+    res.json({ success: true, data: updatedOrder });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   createOrder,
   getOrdersByUser,
   getOrderById,
   updateOrderStatus,
   shiprocketWebhook,
+  returnOrder,
 };

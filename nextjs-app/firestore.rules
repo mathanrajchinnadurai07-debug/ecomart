@@ -15,10 +15,14 @@ service cloud.firestore {
       allow write: if false; // Server-side writes only
     }
 
-    // Users can only read their own eco-points profile
+    // Users can read and write their own profile and subcollections (cart, sessions)
     match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if false; // Server-side writes only
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow access to subcollections like 'cart', 'active_sessions', etc.
+      match /{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
   }
 }

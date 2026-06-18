@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS orders (
   payment_id   VARCHAR(255),
   shipment_id  VARCHAR(255), -- for Shiprocket tracking
   shiprocket_order_id VARCHAR(100), -- for Shiprocket order identification
+  return_reason TEXT,
   created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );
 

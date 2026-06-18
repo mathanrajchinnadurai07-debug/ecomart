@@ -216,6 +216,46 @@ export default function Dashboard() {
     }
   };
 
+  const handleOpenReturnModal = (orderItem) => {
+    setOrderToCancel(orderItem);
+    setCancelReason('Damaged Product');
+    setCancelOtherReason('');
+    setCancelModalOpen(true); // Using same modal for simplicity
+  };
+
+  const handleConfirmReturnOrder = async () => {
+    if (!orderToCancel) return;
+    const finalReason = cancelReason === 'Other' ? (cancelOtherReason || 'Other') : cancelReason;
+
+    try {
+      let token = 'firebase_guest';
+      if (auth.currentUser) {
+        token = await auth.currentUser.getIdToken();
+      }
+
+      // Hit the new backend endpoint
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/orders/${orderToCancel.orderId}/return`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ reason: finalReason })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to request return');
+      }
+
+      setCancelModalOpen(false);
+      addToast('Return requested successfully', 'success');
+      fetchOrders();
+    } catch (e) {
+      console.error(e);
+      addToast('Failed to request return', 'error');
+    }
+  };
+
   const handleCopyReferCode = () => {
     navigator.clipboard.writeText(referCode).then(() => {
       addToast('Referral code copied! 🎉', 'success');
@@ -571,7 +611,7 @@ export default function Dashboard() {
                     <div className="dash-order-head">
                       <span className="dash-order-num">Order #{o.orderId}</span>
                       <span className={`status-badge status-${o.status || 'placed'}`}>
-                        {o.status || 'placed'}
+                        {(o.status === 'return_requested') ? 'RETURN REQUESTED' : (o.status || 'placed')}
                       </span>
                     </div>
                     <div className="dash-order-items">
@@ -586,6 +626,11 @@ export default function Dashboard() {
                         {canCancel && (
                           <button onClick={() => handleOpenCancelModal(o)} className="btn-cancel">
                             Cancel
+                          </button>
+                        )}
+                        {isDelivered && (
+                          <button onClick={() => handleOpenReturnModal(o)} className="btn-cancel" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>
+                            Return
                           </button>
                         )}
                       </div>
@@ -1036,16 +1081,23 @@ export default function Dashboard() {
 
 
 
-      {/* Cancellation Modal */}
+      {/* Cancellation/Return Modal */}
       {cancelModalOpen && orderToCancel && (
         <div className="modal-backdrop">
           <div className="modal-box">
-            <h3 style={{ margin: '0 0 6px', fontSize: '1.1rem', color: '#1a5c38', fontWeight: '800', fontFamily: 'Poppins, sans-serif' }}>Cancel Order</h3>
+            <h3 style={{ margin: '0 0 6px', fontSize: '1.1rem', color: orderToCancel.status === 'delivered' ? '#f59e0b' : '#1a5c38', fontWeight: '800', fontFamily: 'Poppins, sans-serif' }}>
+              {orderToCancel.status === 'delivered' ? 'Return Order' : 'Cancel Order'}
+            </h3>
             <p style={{ margin: '0 0 16px', fontSize: '0.8rem', color: '#888', fontWeight: '500' }}>Order ID: #{orderToCancel.orderId}</p>
-            <p style={{ fontSize: '0.88rem', fontWeight: '700', marginBottom: '12px', color: '#333' }}>Why do you want to cancel?</p>
+            <p style={{ fontSize: '0.88rem', fontWeight: '700', marginBottom: '12px', color: '#333' }}>
+              {orderToCancel.status === 'delivered' ? 'Why do you want to return this?' : 'Why do you want to cancel?'}
+            </p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '18px' }}>
-              {['Changed my mind', 'Found better price elsewhere', 'Ordered by mistake', 'Delivery taking too long', 'Other'].map(reason => (
+              {(orderToCancel.status === 'delivered' ? 
+                ['Damaged Product', 'Defective Item', 'Wrong Item Received', 'Missing Accessories', 'Other'] : 
+                ['Changed my mind', 'Found better price elsewhere', 'Ordered by mistake', 'Delivery taking too long', 'Other']
+              ).map(reason => (
                 <label key={reason} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.88rem', cursor: 'pointer', fontWeight: '500', color: '#444' }}>
                   <input 
                     type="radio" 
@@ -1077,10 +1129,10 @@ export default function Dashboard() {
                 Keep Order
               </button>
               <button 
-                onClick={handleConfirmCancelOrder} 
-                style={{ padding: '10px 16px', border: 'none', background: '#ef4444', color: '#fff', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', boxShadow: '0 4px 10px rgba(239,68,68,0.2)' }}
+                onClick={orderToCancel.status === 'delivered' ? handleConfirmReturnOrder : handleConfirmCancelOrder} 
+                style={{ padding: '10px 16px', border: 'none', background: orderToCancel.status === 'delivered' ? '#f59e0b' : '#ef4444', color: '#fff', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', boxShadow: orderToCancel.status === 'delivered' ? '0 4px 10px rgba(245,158,11,0.2)' : '0 4px 10px rgba(239,68,68,0.2)' }}
               >
-                Confirm Cancel
+                {orderToCancel.status === 'delivered' ? 'Confirm Return' : 'Confirm Cancel'}
               </button>
             </div>
           </div>
