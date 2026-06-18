@@ -16,7 +16,7 @@ const toSlug = (n) => n.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace
 
 const EMPTY_FORM = {
   name:'', slug:'', category:'biscuits', price:'', discountPrice:'',
-  stock:'100', rating:'4.5', numReviews:'0', description:'', isFeatured: false, image_url:''
+  stock:'100', rating:'4.5', numReviews:'0', description:'', isFeatured: false, image_url:'', seller_id:''
 };
 
 export default function AdminPanel() {
@@ -29,18 +29,30 @@ export default function AdminPanel() {
     if (!authLoading && !isDevBypass) {
       if (!user) {
         router.push('/login?redirect=/admin-upload');
-      } else if (user.email !== 'curfee01@gmail.com') {
+      } else if (user.email !== 'mathanrajchinnadurai07@gmail.com') {
         router.push('/');
       }
     }
   }, [user, authLoading, router, isDevBypass]);
 
-  /* ─── view: 'list' | 'add' | 'edit' ─── */
+  /* ─── view: 'list' | 'add' | 'edit' | 'sellers' ─── */
   const [view, setView]           = useState('list');
   const [products, setProducts]   = useState([]);
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
   const [editTarget, setEditTarget] = useState(null); // product being edited
+
+  /* Admin Password verification */
+  const [isVerified, setIsVerified] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  /* Sellers state */
+  const [sellers, setSellers] = useState([]);
+  const [sellerForm, setSellerForm] = useState({ name: '', email: '', phone: '', line1: '', city: '', state: '', pincode: '' });
+  const [editingSeller, setEditingSeller] = useState(null);
+  const [sellerFormError, setSellerFormError] = useState('');
+  const [sellerActionStatus, setSellerActionStatus] = useState('idle');
 
   /* form state */
   const [form, setForm]           = useState(EMPTY_FORM);
@@ -55,6 +67,37 @@ export default function AdminPanel() {
 
   /* ─── stats ─── */
   const [stats, setStats] = useState({ total:0, featured:0, outOfStock:0, categories:0 });
+
+  /* Check verification from session on mount */
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const verified = sessionStorage.getItem('curify_admin_verified') === 'true';
+      setIsVerified(verified);
+    }
+  }, []);
+
+  const handleVerifyPassword = (e) => {
+    e.preventDefault();
+    const secret = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'CurifyAdmin2026';
+    if (adminPasswordInput === secret) {
+      sessionStorage.setItem('curify_admin_verified', 'true');
+      setIsVerified(true);
+      setAuthError('');
+    } else {
+      setAuthError('Incorrect secret admin password!');
+    }
+  };
+
+  /* ─── Load sellers ─── */
+  const fetchSellers = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/api/sellers`);
+      const d = await r.json();
+      setSellers(d.data || []);
+    } catch (err) {
+      console.error('Failed to fetch sellers:', err);
+    }
+  }, []);
 
   /* ─── Load products ─── */
   const fetchProducts = useCallback(async () => {
@@ -77,7 +120,127 @@ export default function AdminPanel() {
     }
   }, []);
 
-  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  useEffect(() => { 
+    fetchProducts(); 
+    fetchSellers();
+  }, [fetchProducts, fetchSellers]);
+
+  const handleSellerField = (e) => {
+    const { name, value } = e.target;
+    setSellerForm(f => ({ ...f, [name]: value }));
+  };
+
+  const handleSellerSubmit = async (e) => {
+    e.preventDefault();
+    setSellerFormError('');
+    if (!sellerForm.name.trim() || !sellerForm.email.trim()) {
+      setSellerFormError('Name and Email are required.');
+      return;
+    }
+
+    try {
+      setSellerActionStatus('saving');
+      const isEdit = !!editingSeller;
+      const url = isEdit ? `${API}/api/sellers/${editingSeller.id}` : `${API}/api/sellers`;
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const payload = {
+        name: sellerForm.name.trim(),
+        email: sellerForm.email.trim(),
+        phone: sellerForm.phone.trim(),
+        address: {
+          line1: sellerForm.line1.trim(),
+          city: sellerForm.city.trim(),
+          state: sellerForm.state.trim(),
+          pincode: sellerForm.pincode.trim()
+        },
+        is_active: editingSeller ? editingSeller.is_active : true
+      };
+
+      let authHeaderValue = 'Bearer dev_admin';
+      if (user) {
+        const idToken = await user.getIdToken();
+        authHeaderValue = `Bearer ${idToken}`;
+      }
+
+      const r = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'Authorization': authHeaderValue },
+        body: JSON.stringify(payload)
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Failed to save seller');
+
+      setSellerActionStatus('done');
+      await fetchSellers();
+      setSellerForm({ name: '', email: '', phone: '', line1: '', city: '', state: '', pincode: '' });
+      setEditingSeller(null);
+      setTimeout(() => setSellerActionStatus('idle'), 1500);
+    } catch (err) {
+      setSellerFormError(err.message);
+      setSellerActionStatus('error');
+    }
+  };
+
+  const startEditSeller = (seller) => {
+    setEditingSeller(seller);
+    const addr = seller.address || {};
+    setSellerForm({
+      name: seller.name || '',
+      email: seller.email || '',
+      phone: seller.phone || '',
+      line1: addr.line1 || '',
+      city: addr.city || '',
+      state: addr.state || '',
+      pincode: addr.pincode || ''
+    });
+    setSellerFormError('');
+  };
+
+  const handleDeactivateSeller = async (seller) => {
+    if (!confirm(`Deactivate seller "${seller.name}"? They will no longer be active.`)) return;
+    try {
+      let authHeaderValue = 'Bearer dev_admin';
+      if (user) {
+        const idToken = await user.getIdToken();
+        authHeaderValue = `Bearer ${idToken}`;
+      }
+      const r = await fetch(`${API}/api/sellers/${seller.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': authHeaderValue }
+      });
+      if (!r.ok) throw new Error('Failed to deactivate');
+      await fetchSellers();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleActivateSeller = async (seller) => {
+    try {
+      let authHeaderValue = 'Bearer dev_admin';
+      if (user) {
+        const idToken = await user.getIdToken();
+        authHeaderValue = `Bearer ${idToken}`;
+      }
+      const payload = {
+        name: seller.name,
+        email: seller.email,
+        phone: seller.phone || '',
+        address: seller.address,
+        is_active: true
+      };
+      const r = await fetch(`${API}/api/sellers/${seller.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': authHeaderValue },
+        body: JSON.stringify(payload)
+      });
+      if (!r.ok) throw new Error('Failed to activate');
+      await fetchSellers();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 
   /* ─── Filtered list ─── */
   const filtered = products.filter(p =>
@@ -112,7 +275,8 @@ export default function AdminPanel() {
       numReviews: p.num_reviews || p.numReviews || 0,
       description: p.description || '',
       isFeatured: !!(p.isFeatured || p.is_featured),
-      image_url: p.image_url || p.imageUrl || ''
+      image_url: p.image_url || p.imageUrl || '',
+      seller_id: p.seller_id || ''
     });
     setWeights((p.weights?.length ? p.weights : [{ label:'100g', price:'', discountPrice:'' }]));
     setImageFile(null);
@@ -120,6 +284,7 @@ export default function AdminPanel() {
     setStatus('idle');
     setErrorMsg('');
     setView('edit');
+    fetchSellers();
   };
 
   const openAdd = () => {
@@ -131,6 +296,7 @@ export default function AdminPanel() {
     setStatus('idle');
     setErrorMsg('');
     setView('add');
+    fetchSellers();
   };
 
   /* ─── Image ─── */
@@ -184,6 +350,7 @@ export default function AdminPanel() {
         slug, isFeatured: form.isFeatured,
         rating: parseFloat(form.rating) || 4.5,
         numReviews: parseInt(form.numReviews) || 0,
+        seller_id: form.seller_id ? parseInt(form.seller_id) : null,
         weights: weights.filter(w => w.label).map(w => ({
           label: w.label,
           price: parseFloat(w.price) || parseFloat(form.price) || 0,
@@ -262,10 +429,27 @@ export default function AdminPanel() {
     );
   }
 
-  if (!isDevBypass && (!user || user.email !== 'curfee01@gmail.com')) {
+  if (!isDevBypass && (!user || user.email !== 'mathanrajchinnadurai07@gmail.com')) {
     return (
       <div className="ap" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#0d1117', color: '#e6edf3', fontFamily: 'Inter, sans-serif' }}>
         <span>Not authorized. Redirecting…</span>
+      </div>
+    );
+  }
+
+  if (!isVerified && !isDevBypass) {
+    return (
+      <div className="ap" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#0d1117', color: '#e6edf3', fontFamily: 'Inter, sans-serif' }}>
+        <form onSubmit={handleVerifyPassword} className="sec" style={{ width: '400px', padding: '30px', borderRadius: '12px', background: '#161b22', border: '1px solid #30363d', textAlign: 'center' }}>
+          <h2 style={{ color: '#3fb950', marginBottom: '15px' }}>🔐 Admin Verification</h2>
+          <p style={{ color: '#8b949e', fontSize: '0.85rem', marginBottom: '20px' }}>Please enter your secret password to enter the Curify Admin Panel.</p>
+          <div className="fg" style={{ marginBottom: '20px', textAlign: 'left' }}>
+            <label style={{ fontSize:'0.72rem', fontWeight:600, color:'#8b949e', textTransform:'uppercase', letterSpacing:'0.06em' }}>Admin Password</label>
+            <input type="password" value={adminPasswordInput} onChange={e => setAdminPasswordInput(e.target.value)} placeholder="••••••••" required style={{ marginTop: '5px', background:'#0d1117', border:'1px solid #30363d', color:'#e6edf3', borderRadius:'8px', padding:'10px 12px', width:'100%', outline:'none' }} />
+          </div>
+          {authError && <p style={{ color: '#f85149', fontSize: '0.82rem', marginBottom: '15px' }}>⚠️ {authError}</p>}
+          <button type="submit" className="btn-primary" style={{ width: '100%', background:'linear-gradient(135deg,#1a5c38,#3fb950)', color:'#fff', border:'none', padding:'10px 22px', borderRadius:'9px', cursor:'pointer', fontWeight:'bold' }}>Verify Password</button>
+        </form>
       </div>
     );
   }
@@ -299,6 +483,9 @@ export default function AdminPanel() {
             <button className={`sb-link ${view==='add'?'active':''}`} onClick={openAdd}>
               <span>➕</span> Add Product
             </button>
+            <button className={`sb-link ${view==='sellers'?'active':''}`} onClick={() => setView('sellers')}>
+              <span>🏪</span> Sellers
+            </button>
             <button className="sb-link" onClick={() => router.push('/')}>
               <span>🏠</span> View Store
             </button>
@@ -317,7 +504,7 @@ export default function AdminPanel() {
         <main className="ap-main">
           {isDevBypass && !user && (
             <div className="banner banner-err" style={{ marginBottom: 20 }}>
-              ⚠️ <strong>Developer Bypass Active:</strong> You are viewing this page on localhost without being logged in. In production, this page is strictly restricted to <strong>curfee01@gmail.com</strong>.
+              ⚠️ <strong>Developer Bypass Active:</strong> You are viewing this page on localhost without being logged in. In production, this page is strictly restricted to <strong>mathanrajchinnadurai07@gmail.com</strong>.
             </div>
           )}
 
@@ -454,6 +641,15 @@ export default function AdminPanel() {
                         ))}
                       </select>
                     </div>
+                    <div className="fg">
+                      <label>Seller / Vendor *</label>
+                      <select name="seller_id" value={form.seller_id || ''} onChange={handleField}>
+                        <option value="">Default Store</option>
+                        {sellers.map(s => (
+                          <option key={s.id} value={s.id}>{s.name} ({s.email}) {s.is_active ? '' : '(Inactive)'}</option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="fg span2">
                       <label>Description</label>
                       <textarea name="description" value={form.description} onChange={handleField}
@@ -539,6 +735,126 @@ export default function AdminPanel() {
                 </div>
 
               </form>
+            </>
+          )}
+
+          {/* ── SELLERS VIEW ── */}
+          {view === 'sellers' && (
+            <>
+              <div className="page-hdr">
+                <div>
+                  <h1 className="page-title">Sellers / Vendors</h1>
+                  <p className="page-sub">Manage shop vendors and their locations</p>
+                </div>
+              </div>
+
+              <div className="grid2" style={{ alignItems: 'start' }}>
+                
+                {/* Left: Add / Edit Seller */}
+                <div className="sec">
+                  <h2 className="sec-title">{editingSeller ? '✏️ Edit Seller' : '➕ Add New Seller'}</h2>
+                  {sellerFormError && <div className="banner banner-err">⚠️ {sellerFormError}</div>}
+                  {sellerActionStatus === 'done' && <div className="banner banner-ok">✅ Seller saved successfully!</div>}
+                  
+                  <form onSubmit={handleSellerSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div className="fg">
+                      <label>Seller Name *</label>
+                      <input name="name" value={sellerForm.name} onChange={handleSellerField} placeholder="e.g. Green Farms" required />
+                    </div>
+                    <div className="fg">
+                      <label>Email Address *</label>
+                      <input type="email" name="email" value={sellerForm.email} onChange={handleSellerField} placeholder="vendor@example.com" required />
+                    </div>
+                    <div className="fg">
+                      <label>Phone Number</label>
+                      <input name="phone" value={sellerForm.phone} onChange={handleSellerField} placeholder="e.g. 9876543210" />
+                    </div>
+                    <div className="fg">
+                      <label>Address Line 1 *</label>
+                      <input name="line1" value={sellerForm.line1} onChange={handleSellerField} placeholder="Street, Building No" required />
+                    </div>
+                    <div className="grid2">
+                      <div className="fg">
+                        <label>City *</label>
+                        <input name="city" value={sellerForm.city} onChange={handleSellerField} placeholder="Chennai" required />
+                      </div>
+                      <div className="fg">
+                        <label>State *</label>
+                        <input name="state" value={sellerForm.state} onChange={handleSellerField} placeholder="Tamil Nadu" required />
+                      </div>
+                    </div>
+                    <div className="fg">
+                      <label>Pincode *</label>
+                      <input name="pincode" value={sellerForm.pincode} onChange={handleSellerField} placeholder="600001" required />
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                      {editingSeller && (
+                        <button type="button" className="btn-ghost" style={{ flex: 1 }} onClick={() => {
+                          setEditingSeller(null);
+                          setSellerForm({ name:'', email:'', phone:'', line1:'', city:'', state:'', pincode:'' });
+                        }}>Cancel</button>
+                      )}
+                      <button type="submit" className="btn-primary" style={{ flex: 1 }} disabled={sellerActionStatus === 'saving'}>
+                        {sellerActionStatus === 'saving' ? 'Saving…' : editingSeller ? 'Update Seller' : 'Add Seller'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Right: Seller List */}
+                <div className="sec" style={{ overflowX: 'auto' }}>
+                  <h2 className="sec-title">🏪 Registered Sellers</h2>
+                  {sellers.length === 0 ? (
+                    <p style={{ color: '#8b949e', fontSize: '0.88rem' }}>No sellers found.</p>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #30363d', textAlign: 'left', color: '#8b949e' }}>
+                          <th style={{ padding: '8px' }}>Name</th>
+                          <th style={{ padding: '8px' }}>Email</th>
+                          <th style={{ padding: '8px' }}>City</th>
+                          <th style={{ padding: '8px' }}>Status</th>
+                          <th style={{ padding: '8px', textAlign: 'right' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sellers.map(s => {
+                          const addr = s.address || {};
+                          return (
+                            <tr key={s.id} style={{ borderBottom: '1px solid #21262d' }}>
+                              <td style={{ padding: '8px', fontWeight: 'bold' }}>{s.name}</td>
+                              <td style={{ padding: '8px' }}>{s.email}</td>
+                              <td style={{ padding: '8px' }}>{addr.city || '—'}</td>
+                              <td style={{ padding: '8px' }}>
+                                <span style={{
+                                  padding: '2px 6px',
+                                  borderRadius: '10px',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 'bold',
+                                  backgroundColor: s.is_active ? '#1a3a21' : '#2d1010',
+                                  color: s.is_active ? '#3fb950' : '#f85149'
+                                }}>
+                                  {s.is_active ? 'Active' : 'Inactive'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'right', display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                <button className="btn-edit" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => startEditSeller(s)}>✏️</button>
+                                {s.is_active ? (
+                                  <button className="btn-delete" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => handleDeactivateSeller(s)}>Deactivate</button>
+                                ) : (
+                                  <button className="btn-primary" style={{ padding: '4px 8px', fontSize: '0.75rem', background: '#2D6A4F', boxShadow: 'none' }} onClick={() => handleActivateSeller(s)}>Activate</button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+              </div>
             </>
           )}
 

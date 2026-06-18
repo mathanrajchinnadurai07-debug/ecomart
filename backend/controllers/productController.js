@@ -119,7 +119,7 @@ const createProduct = async (req, res, next) => {
   try {
     const { 
       name, price, original_price, discount, category, image_url, description, stock,
-      slug, weights, isFeatured, rating, numReviews
+      slug, weights, isFeatured, rating, numReviews, seller_id
     } = req.body;
 
     if (!name || !price || !category) {
@@ -127,9 +127,9 @@ const createProduct = async (req, res, next) => {
     }
 
     const { rows } = await db.query(
-      `INSERT INTO products (name, price, original_price, discount, category, image_url, description, stock)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [name, price, original_price || null, discount || 0, category, image_url || null, description || null, stock || 0]
+      `INSERT INTO products (name, price, original_price, discount, category, image_url, description, stock, seller_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [name, price, original_price || null, discount || 0, category, image_url || null, description || null, stock || 0, seller_id || null]
     );
 
     const productDb = rows[0];
@@ -175,7 +175,7 @@ const createProduct = async (req, res, next) => {
 const updateProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, price, original_price, discount, category, image_url, description, stock } = req.body;
+    const { name, price, original_price, discount, category, image_url, description, stock, seller_id } = req.body;
 
     const { rows } = await db.query(
       `UPDATE products
@@ -186,9 +186,10 @@ const updateProduct = async (req, res, next) => {
            category = COALESCE($5, category),
            image_url = COALESCE($6, image_url),
            description = COALESCE($7, description),
-           stock = COALESCE($8, stock)
-       WHERE id = $9 RETURNING *`,
-      [name, price, original_price, discount, category, image_url, description, stock, id]
+           stock = COALESCE($8, stock),
+           seller_id = COALESCE($9, seller_id)
+       WHERE id = $10 RETURNING *`,
+      [name, price, original_price, discount, category, image_url, description, stock, seller_id, id]
     );
 
     if (!rows.length) {

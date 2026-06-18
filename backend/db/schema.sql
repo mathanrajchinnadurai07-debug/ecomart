@@ -78,3 +78,53 @@ CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_orders_user_id    ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_product   ON reviews(product_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+
+-- =============================================
+-- Multi-Vendor & Delivery Job Additions
+-- =============================================
+
+-- Enum for delivery status (safer than raw VARCHAR)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'delivery_status') THEN
+    CREATE TYPE delivery_status AS ENUM ('assigned', 'picked_up', 'in_transit', 'delivered', 'failed');
+  END IF;
+END$$;
+
+-- Sellers table
+CREATE TABLE IF NOT EXISTS sellers (
+  id           SERIAL PRIMARY KEY,
+  name         VARCHAR(255) NOT NULL,
+  email        VARCHAR(255) UNIQUE NOT NULL,
+  phone        VARCHAR(20),
+  address      JSONB NOT NULL,
+  is_active    BOOLEAN DEFAULT TRUE,        -- soft delete instead of hard delete
+  created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index for frequent lookups
+CREATE INDEX IF NOT EXISTS idx_sellers_email ON sellers(email);
+CREATE INDEX IF NOT EXISTS idx_sellers_is_active ON sellers(is_active);
+
+-- Delivery jobs table
+CREATE TABLE IF NOT EXISTS delivery_jobs (
+  id               SERIAL PRIMARY KEY,
+  order_id         INTEGER REFERENCES orders(id) ON DELETE CASCADE,
+  seller_id        INTEGER REFERENCES sellers(id) ON DELETE RESTRICT, -- prevent seller delete if jobs exist
+  pickup_address   JSONB NOT NULL,
+  delivery_address JSONB NOT NULL,
+  status           delivery_status DEFAULT 'assigned',
+  notified_at      TIMESTAMP,               -- track when email was sent
+  created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_delivery_jobs_order_id ON delivery_jobs(order_id);
+CREATE INDEX IF NOT EXISTS idx_delivery_jobs_seller_id ON delivery_jobs(seller_id);
+CREATE INDEX IF NOT EXISTS idx_delivery_jobs_status ON delivery_jobs(status);
+
+-- Products update
+ALTER TABLE products ADD COLUMN IF NOT EXISTS seller_id INTEGER REFERENCES sellers(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_products_seller_id ON products(seller_id);
+

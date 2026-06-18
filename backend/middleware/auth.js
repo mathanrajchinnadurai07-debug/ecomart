@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+const { ADMIN_EMAIL } = require('../config/constants');
 
 const hasFirebaseCredentials = 
   process.env.FIREBASE_PROJECT_ID && 
@@ -62,7 +63,7 @@ const verifyToken = async (req, res, next) => {
       uid: decoded.uid,
       email: decoded.email,
       name: decoded.name || '',
-      role: (decoded.role === 'admin' || decoded.email === 'curfee01@gmail.com') ? 'admin' : 'customer',
+      role: (decoded.role === 'admin' || decoded.email === ADMIN_EMAIL) ? 'admin' : 'customer',
     };
 
     next();

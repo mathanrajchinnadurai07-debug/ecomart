@@ -3,6 +3,7 @@ const { deleteCachePattern } = require('../config/redis');
 const admin = require('firebase-admin');
 const { createShiprocketOrder } = require('../config/shiprocket');
 const { sendOrderConfirmationEmail } = require('../utils/email');
+const { createDeliveryJobs, sendDeliveryNotifications } = require('../services/deliveryService');
 
 // --------------- POST /api/orders ---------------
 const createOrder = async (req, res, next) => {
@@ -18,7 +19,7 @@ const createOrder = async (req, res, next) => {
 
     // Verify stock for each item
     for (const item of items) {
-      const { rows } = await client.query('SELECT stock FROM products WHERE id = $1 FOR UPDATE', [item.product_id]);
+      const { rows } = await client.query('SELECT stock, seller_id, name, price FROM products WHERE id = $1 FOR UPDATE', [item.product_id]);
       if (!rows.length) {
         await client.query('ROLLBACK');
         return res.status(404).json({ success: false, error: `Product ${item.product_id} not found` });
@@ -27,6 +28,12 @@ const createOrder = async (req, res, next) => {
         await client.query('ROLLBACK');
         return res.status(400).json({ success: false, error: `Insufficient stock for product ${item.product_id}` });
       }
+
+      // Enrich item with db details for order recording
+      item.seller_id = rows[0].seller_id;
+      if (!item.name) item.name = rows[0].name;
+      if (!item.price) item.price = parseFloat(rows[0].price);
+
       // Decrement stock
       await client.query('UPDATE products SET stock = stock - $1 WHERE id = $2', [item.quantity, item.product_id]);
     }
@@ -99,7 +106,16 @@ const createOrder = async (req, res, next) => {
       console.error('Shiprocket order creation failed during checkout:', srErr);
     }
 
+    // Create delivery jobs inside the transaction
+    const parsedDeliveryAddress = typeof address === 'string' ? JSON.parse(address) : (address || {});
+    const jobsCreated = await createDeliveryJobs(newOrder.id, items, parsedDeliveryAddress, client);
+
     await client.query('COMMIT');
+
+    // Dispatch notifications asynchronously outside the transaction
+    sendDeliveryNotifications(jobsCreated, newOrder.id, parsedDeliveryAddress)
+      .then(results => console.log('[OrderController] Delivery dispatches completed:', results))
+      .catch(err => console.error('[OrderController] Delivery dispatches failed:', err));
 
     // Invalidate relevant caches
     await deleteCachePattern('products:*');
