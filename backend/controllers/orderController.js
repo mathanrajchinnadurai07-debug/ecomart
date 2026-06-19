@@ -123,11 +123,27 @@ const createOrder = async (req, res, next) => {
 
     // Sync to Firestore
     try {
-      await admin.firestore().collection('orders').doc(newOrder.id.toString()).set({
+      const timestamp = admin.firestore.FieldValue.serverTimestamp();
+      const firestorePayload = {
         ...newOrder,
-        updated_at: admin.firestore.FieldValue.serverTimestamp()
+        updated_at: timestamp,
+        statusHistory: [{ status: initialStatus, timestamp: new Date().toISOString() }]
+      };
+
+      // 1. Global Orders Collection
+      await admin.firestore().collection('orders').doc(newOrder.id.toString()).set(firestorePayload);
+      
+      // 2. User's specific Orders Collection (used by Dashboard)
+      await admin.firestore().collection('users').doc(user_id).collection('orders').doc(newOrder.id.toString()).set({
+        orderId: newOrder.id.toString(),
+        total: total_amount,
+        items: items,
+        status: initialStatus,
+        createdAt: new Date().toISOString(),
+        statusHistory: [{ status: initialStatus, timestamp: new Date().toISOString() }]
       });
 
+      // 3. User points
       if (pointsToAward > 0) {
         await admin.firestore().collection('users').doc(user_id).set({
           eco_points: admin.firestore.FieldValue.increment(pointsToAward)
@@ -228,11 +244,22 @@ const updateOrderStatus = async (req, res, next) => {
 
     // Sync to Firestore
     try {
-      await admin.firestore().collection('orders').doc(updatedOrder.id.toString()).update({
+      const historyEntry = { status: updatedOrder.status, timestamp: new Date().toISOString() };
+      const fsUpdate = {
         status: updatedOrder.status,
-        payment_id: updatedOrder.payment_id,
-        updated_at: admin.firestore.FieldValue.serverTimestamp()
-      });
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        statusHistory: admin.firestore.FieldValue.arrayUnion(historyEntry)
+      };
+      if (updatedOrder.payment_id) {
+        fsUpdate.payment_id = updatedOrder.payment_id;
+      }
+      
+      // 1. Global Orders Collection
+      await admin.firestore().collection('orders').doc(updatedOrder.id.toString()).update(fsUpdate);
+      
+      // 2. User's specific Orders Collection
+      await admin.firestore().collection('users').doc(updatedOrder.user_id).collection('orders').doc(updatedOrder.id.toString()).update(fsUpdate);
+
     } catch (fsErr) {
       console.error('Error syncing order status update to Firestore:', fsErr);
     }
@@ -276,10 +303,14 @@ const shiprocketWebhook = async (req, res, next) => {
         
         // Sync to Firestore
         try {
-          await admin.firestore().collection('orders').doc(order.id.toString()).update({
+          const historyEntry = { status: newStatus, timestamp: new Date().toISOString() };
+          const fsUpdate = {
             status: newStatus,
-            updated_at: admin.firestore.FieldValue.serverTimestamp()
-          });
+            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            statusHistory: admin.firestore.FieldValue.arrayUnion(historyEntry)
+          };
+          await admin.firestore().collection('orders').doc(order.id.toString()).update(fsUpdate);
+          await admin.firestore().collection('users').doc(order.user_id).collection('orders').doc(order.id.toString()).update(fsUpdate);
         } catch (fsErr) {
           console.error('Error syncing webhook status to Firestore:', fsErr);
         }
@@ -319,11 +350,15 @@ const returnOrder = async (req, res, next) => {
 
     // Sync to Firestore
     try {
-      await admin.firestore().collection('orders').doc(id.toString()).update({
+      const historyEntry = { status: 'return_requested', timestamp: new Date().toISOString() };
+      const fsUpdate = {
         status: 'return_requested',
         return_reason: reason || 'Customer requested return',
-        updated_at: admin.firestore.FieldValue.serverTimestamp()
-      });
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        statusHistory: admin.firestore.FieldValue.arrayUnion(historyEntry)
+      };
+      await admin.firestore().collection('orders').doc(id.toString()).update(fsUpdate);
+      await admin.firestore().collection('users').doc(updatedOrder.user_id).collection('orders').doc(id.toString()).update(fsUpdate);
     } catch (fsErr) {
       console.error('Error syncing return request to Firestore:', fsErr);
     }

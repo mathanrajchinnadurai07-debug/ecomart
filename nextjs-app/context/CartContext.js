@@ -249,6 +249,18 @@ export const CartProvider = ({ children }) => {
           await batch.commit();
           localStorage.removeItem('Curify_cart');
         }
+
+        // Merge local wishlist to Firestore
+        const localWishlist = JSON.parse(localStorage.getItem('Curify_wishlist') || '[]');
+        if (localWishlist.length > 0) {
+          const batch = writeBatch(db);
+          for (const productId of localWishlist) {
+            const wishItemRef = doc(db, 'users', currentUser.uid, 'wishlist', productId);
+            batch.set(wishItemRef, { addedAt: serverTimestamp() }, { merge: true });
+          }
+          await batch.commit();
+          localStorage.removeItem('Curify_wishlist');
+        }
       } else {
         setUser(null);
         setUserProfile(null);
@@ -258,16 +270,14 @@ export const CartProvider = ({ children }) => {
         localStorage.removeItem('Curify_token');
         localStorage.removeItem('Curify_user');
         
-        // Load cart from local storage
+        // Load cart and wishlist from local storage
         const localCart = JSON.parse(localStorage.getItem('Curify_cart') || '[]');
         setCart(localCart);
+        const localWishlist = JSON.parse(localStorage.getItem('Curify_wishlist') || '[]');
+        setWishlist(localWishlist);
       }
       setLoading(false);
     });
-
-    // Sync wishlist from local storage initially
-    const localWishlist = JSON.parse(localStorage.getItem('Curify_wishlist') || '[]');
-    setWishlist(localWishlist);
 
     return () => {
       unsubscribe();
@@ -275,11 +285,13 @@ export const CartProvider = ({ children }) => {
     };
   }, []);
 
-  // Listen to Cart changes if user logged in
+  // Listen to Cart and Wishlist changes if user logged in
   useEffect(() => {
     if (!user) return;
+    
+    // Cart Listener
     const cartRef = collection(db, 'users', user.uid, 'cart');
-    const unsubscribe = onSnapshot(cartRef, (snap) => {
+    const unsubscribeCart = onSnapshot(cartRef, (snap) => {
       const items = snap.docs.map((d) => ({
         id: d.id,
         productId: d.id,
@@ -292,22 +304,51 @@ export const CartProvider = ({ children }) => {
       console.error('Cart snapshot listener error:', error);
     });
 
-    return () => unsubscribe();
+    // Wishlist Listener
+    const wishlistRef = collection(db, 'users', user.uid, 'wishlist');
+    const unsubscribeWishlist = onSnapshot(wishlistRef, (snap) => {
+      const wList = snap.docs.map(d => d.id);
+      setWishlist(wList);
+      localStorage.setItem('Curify_wishlist', JSON.stringify(wList));
+    }, (error) => {
+      console.error('Wishlist snapshot listener error:', error);
+    });
+
+    return () => {
+      unsubscribeCart();
+      unsubscribeWishlist();
+    };
   }, [user]);
 
   // Wishlist handler
-  const toggleWishlist = (productId) => {
+  const toggleWishlist = async (productId) => {
     let updated = [...wishlist];
     const idx = updated.indexOf(productId);
-    if (idx > -1) {
-      updated.splice(idx, 1);
-      addToast('Removed from wishlist 💔', 'info');
+    
+    if (user) {
+      try {
+        const wishDocRef = doc(db, 'users', user.uid, 'wishlist', productId);
+        if (idx > -1) {
+          await deleteDoc(wishDocRef);
+          addToast('Removed from wishlist 💔', 'info');
+        } else {
+          await setDoc(wishDocRef, { addedAt: serverTimestamp() });
+          addToast('Added to wishlist! 💖', 'success');
+        }
+      } catch (err) {
+        console.error('Firestore wishlist error:', err);
+      }
     } else {
-      updated.push(productId);
-      addToast('Added to wishlist! 💖', 'success');
+      if (idx > -1) {
+        updated.splice(idx, 1);
+        addToast('Removed from wishlist 💔', 'info');
+      } else {
+        updated.push(productId);
+        addToast('Added to wishlist! 💖', 'success');
+      }
+      setWishlist(updated);
+      localStorage.setItem('Curify_wishlist', JSON.stringify(updated));
     }
-    setWishlist(updated);
-    localStorage.setItem('Curify_wishlist', JSON.stringify(updated));
   };
 
   const isInWishlist = (productId) => {
