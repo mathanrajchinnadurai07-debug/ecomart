@@ -1067,6 +1067,14 @@ export default function Dashboard() {
 
       {/* Settings Links */}
       <div className="dash-settings-group">
+        {user?.email === 'mathanrajchinnadurai07@gmail.com' && (
+          <Link href="/admin-upload" style={{ textDecoration: 'none' }}>
+            <div className="dash-settings-item" style={{ borderLeft: '3px solid #1a5c38' }}>
+              <span><i className="fas fa-user-shield" style={{ color: '#1a5c38' }}></i> Curify Admin Panel</span>
+              <i className="fas fa-chevron-right"></i>
+            </div>
+          </Link>
+        )}
         <div className="dash-settings-item" onClick={() => { setActiveTab('profile'); window.scrollTo({top: 150, behavior: 'smooth'}); }}>
           <span><i className="fas fa-user-cog" style={{ color: '#1a5c38' }}></i> Edit Profile & Address</span>
           <i className="fas fa-chevron-right"></i>
@@ -1079,7 +1087,12 @@ export default function Dashboard() {
         </Link>
       </div>
 
-
+      {/* Logout Button */}
+      <div className="dash-logout-wrap">
+        <button onClick={logout} className="btn-logout">
+          <i className="fas fa-sign-out-alt"></i> Log Out
+        </button>
+      </div>
 
       {/* Cancellation/Return Modal */}
       {cancelModalOpen && orderToCancel && (
