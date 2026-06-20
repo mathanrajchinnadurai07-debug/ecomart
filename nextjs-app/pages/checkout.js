@@ -262,7 +262,7 @@ export default function Checkout() {
               });
               const verifyData = await verifyRes.json();
 
-              if (verifyData.verified) {
+              if (verifyData.success) {
                 orderPayload.payment.transactionId = paymentResponse.razorpay_payment_id;
                 orderPayload.payment.status = 'paid';
                 await saveOrderToFirestore(orderPayload);

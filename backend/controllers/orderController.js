@@ -17,6 +17,13 @@ const createOrder = async (req, res, next) => {
 
     await client.query('BEGIN');
 
+    // Ensure user exists in Postgres to satisfy foreign key constraint
+    const parsedAddress = typeof address === 'string' ? JSON.parse(address) : (address || {});
+    await client.query(
+      `INSERT INTO users (id, name, email, phone) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+      [user_id, parsedAddress.name || 'User', parsedAddress.email || `user_${user_id}@example.com`, parsedAddress.phone || null]
+    );
+
     // Verify stock for each item
     for (const item of items) {
       const { rows } = await client.query('SELECT stock, seller_id, name, price FROM products WHERE id = $1 FOR UPDATE', [item.product_id]);
