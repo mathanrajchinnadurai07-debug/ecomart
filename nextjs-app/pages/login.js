@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { auth, googleProvider, db } from '../firebase/config';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signInWithPopup,
   updateProfile,
   sendEmailVerification,
@@ -17,9 +17,10 @@ import { useCart } from '../context/CartContext';
 export default function Login() {
   const router = useRouter();
   const { user, addToast } = useCart();
-  
-  const [activeTab, setActiveTab] = useState('login');
-  
+
+  // Which view is active: 'main' | 'phone' | 'email' | 'register'
+  const [view, setView] = useState('main');
+
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -38,42 +39,33 @@ export default function Login() {
   const [confirmationResult, setConfirmationResult] = useState(null);
   const [sendingOtp, setSendingOtp] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
 
   // Redirect if already logged in
   useEffect(() => {
-    if (user && !user.emailVerified && user.providerData.some(p => p.providerId === 'password')) {
-      // Allow redirecting to trigger verification flow in ProtectedRoute
-      const redirect = router.query.redirect || '/';
-      router.push(redirect);
-    } else if (user) {
+    if (user) {
       const redirect = router.query.redirect || '/';
       router.push(redirect);
     }
   }, [user]);
 
-  // Clean up recaptcha container on unmount
+  // Clean up recaptcha on unmount
   useEffect(() => {
     return () => {
       if (window.recaptchaVerifier) {
-        try {
-          window.recaptchaVerifier.clear();
-        } catch (e) {
-          console.error(e);
-        }
+        try { window.recaptchaVerifier.clear(); } catch (e) {}
       }
     };
   }, []);
 
   const checkPasswordStrength = (pwd) => {
     if (!pwd) return { score: 0, text: 'Empty', color: '#cbd5e1' };
-    if (pwd.length < 8) return { score: 1, text: 'Too short (Min 8 chars)', color: '#ef4444' };
-    
+    if (pwd.length < 8) return { score: 1, text: 'Too short (min 8 chars)', color: '#ef4444' };
     let score = 0;
-    if (/[A-Z]/.test(pwd)) score += 1;
-    if (/[a-z]/.test(pwd)) score += 1;
-    if (/[0-9]/.test(pwd)) score += 1;
-    if (/[^A-Za-z0-9]/.test(pwd)) score += 1;
-
+    if (/[A-Z]/.test(pwd)) score++;
+    if (/[a-z]/.test(pwd)) score++;
+    if (/[0-9]/.test(pwd)) score++;
+    if (/[^A-Za-z0-9]/.test(pwd)) score++;
     if (score <= 1) return { score: 2, text: 'Weak', color: '#f59e0b' };
     if (score <= 3) return { score: 3, text: 'Medium', color: '#3b82f6' };
     return { score: 4, text: 'Strong 🌿', color: '#10b981' };
@@ -91,7 +83,6 @@ export default function Login() {
       await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
       addToast('Welcome back! 🌿', 'success');
     } catch (err) {
-      console.error(err);
       let msg = 'Authentication failed. Please check your credentials.';
       if (err.code === 'auth/user-not-found') msg = 'No account found with this email';
       else if (err.code === 'auth/wrong-password') msg = 'Incorrect password';
@@ -110,8 +101,6 @@ export default function Login() {
     try {
       const cred = await createUserWithEmailAndPassword(auth, regEmail, regPassword);
       await updateProfile(cred.user, { displayName: regName });
-      
-      // Save profile in Firestore
       await setDoc(doc(db, 'users', cred.user.uid), {
         name: regName,
         email: regEmail,
@@ -119,12 +108,9 @@ export default function Login() {
         address: { line1: '', line2: '', city: '', pincode: '', state: '' },
         createdAt: serverTimestamp()
       });
-
-      // Send Verification Email
       await sendEmailVerification(cred.user);
       addToast('Verification email sent! Please check your inbox. ✉️', 'info');
     } catch (err) {
-      console.error(err);
       let msg = err.message;
       if (err.code === 'auth/email-already-in-use') msg = 'Email already registered. Try logging in.';
       addToast(msg, 'error');
@@ -136,12 +122,8 @@ export default function Login() {
     try {
       window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
         size: 'invisible',
-        callback: () => {
-          console.log('Recaptcha resolved');
-        },
-        'expired-callback': () => {
-          addToast('Recaptcha expired. Please try again.', 'warning');
-        }
+        callback: () => {},
+        'expired-callback': () => addToast('Recaptcha expired. Please try again.', 'warning')
       });
     } catch (error) {
       console.error('Recaptcha setup error:', error);
@@ -151,22 +133,19 @@ export default function Login() {
   const handleSendOtp = async (e) => {
     e.preventDefault();
     if (!phoneNum || phoneNum.length < 10) {
-      addToast('Please enter a valid phone number with country code (e.g. +91...)', 'error');
+      addToast('Please enter a valid 10-digit phone number', 'error');
       return;
     }
-
     setSendingOtp(true);
     try {
       setupRecaptcha();
       const appVerifier = window.recaptchaVerifier;
       const formattedPhone = phoneNum.startsWith('+') ? phoneNum : `+91${phoneNum}`;
-      
       const confirmation = await signInWithPhoneNumber(auth, formattedPhone, appVerifier);
       setConfirmationResult(confirmation);
       setOtpSent(true);
-      addToast('SMS OTP sent successfully! 💬', 'success');
+      addToast('OTP sent to ' + formattedPhone + ' 💬', 'success');
     } catch (err) {
-      console.error('OTP send failed:', err);
       addToast('Failed to send OTP: ' + (err.message || 'Error occurred'), 'error');
       if (window.recaptchaVerifier) {
         window.recaptchaVerifier.clear();
@@ -183,16 +162,12 @@ export default function Login() {
       addToast('Please enter a 6-digit verification code.', 'error');
       return;
     }
-
     setVerifyingOtp(true);
     try {
       const result = await confirmationResult.confirm(otpCode);
       const u = result.user;
-      
-      // Check if firestore user exists
       const userRef = doc(db, 'users', u.uid);
       const userDoc = await getDoc(userRef);
-
       if (!userDoc.exists()) {
         await setDoc(userRef, {
           name: 'Organic User',
@@ -202,10 +177,8 @@ export default function Login() {
           createdAt: serverTimestamp()
         });
       }
-
       addToast('Logged in successfully! 🌿', 'success');
     } catch (err) {
-      console.error('OTP Verification failed:', err);
       addToast('Invalid verification code. Please try again.', 'error');
     } finally {
       setVerifyingOtp(false);
@@ -216,18 +189,14 @@ export default function Login() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const u = result.user;
-      
-      // Create user document if doesn't exist
       await setDoc(doc(db, 'users', u.uid), {
         name: u.displayName || 'User',
         email: u.email || '',
         phone: u.phoneNumber || '',
         createdAt: serverTimestamp()
       }, { merge: true });
-
       addToast(`Welcome, ${u.displayName || 'User'}! 🌿`, 'success');
     } catch (err) {
-      console.error(err);
       if (err.code !== 'auth/popup-closed-by-user') {
         addToast('Google login failed', 'error');
       }
@@ -235,240 +204,613 @@ export default function Login() {
   };
 
   return (
-    <div className="auth-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh', padding: '40px 16px', fontFamily: "'Inter', sans-serif" }}>
-      <div className="auth-card" style={{ background: '#fff', padding: '30px', borderRadius: '16px', boxShadow: '0 8px 30px rgba(0,0,0,0.08)', width: '100%', maxWidth: '420px', border: '1px solid rgba(0,0,0,0.02)' }}>
-        <div className="auth-logo" style={{ textAlign: 'center', marginBottom: '20px' }}>
-          <Link href="/" className="logo" style={{ justifyContent: 'center', display: 'flex', textDecoration: 'none', alignItems: 'center', gap: '6px' }}>
-            <div className="logo-icon" style={{ fontSize: '1.8rem' }}>🌿</div> 
-            <span style={{ fontSize: '1.6rem', fontWeight: '800', color: '#1a5c38', fontFamily: "'Poppins', sans-serif" }}>Curify</span>
-            <span style={{ fontSize: '1.6rem', fontWeight: '400', color: '#1a1a2e', fontFamily: "'Poppins', sans-serif" }}>Organic</span>
-          </Link>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        .login-page {
+          min-height: 100vh;
+          font-family: 'Inter', sans-serif;
+          background: #f8f8f8;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+
+        /* Hero */
+        .login-hero {
+          width: 100%;
+          max-width: 480px;
+          height: 240px;
+          position: relative;
+          overflow: hidden;
+          border-radius: 0 0 32px 32px;
+          flex-shrink: 0;
+        }
+        .login-hero img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .login-hero-overlay {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(to bottom, rgba(26,92,56,0.35) 0%, rgba(26,92,56,0.7) 100%);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: flex-end;
+          padding: 24px;
+        }
+        .login-hero-logo {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          text-decoration: none;
+          margin-bottom: 8px;
+        }
+        .login-hero-logo .leaf { font-size: 2rem; }
+        .login-hero-logo .brand-name {
+          font-family: 'Poppins', sans-serif;
+          font-size: 2rem;
+          font-weight: 800;
+          color: #fff;
+          letter-spacing: -0.5px;
+        }
+        .login-hero-tagline {
+          font-family: 'Poppins', sans-serif;
+          font-size: 1rem;
+          font-weight: 600;
+          color: rgba(255,255,255,0.92);
+          text-align: center;
+          line-height: 1.4;
+        }
+
+        /* Card */
+        .login-card {
+          width: 100%;
+          max-width: 480px;
+          background: #fff;
+          border-radius: 24px 24px 0 0;
+          padding: 28px 24px 40px;
+          flex: 1;
+          position: relative;
+          margin-top: -16px;
+          box-shadow: 0 -4px 30px rgba(0,0,0,0.08);
+        }
+
+        .login-section-title {
+          font-size: 0.78rem;
+          font-weight: 600;
+          color: #9ca3af;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin-bottom: 16px;
+          text-align: center;
+        }
+
+        /* Phone input row */
+        .phone-row {
+          display: flex;
+          border: 1.5px solid #e5e7eb;
+          border-radius: 12px;
+          overflow: hidden;
+          background: #fff;
+          transition: border-color 0.2s;
+        }
+        .phone-row:focus-within {
+          border-color: #1a5c38;
+          box-shadow: 0 0 0 3px rgba(26,92,56,0.1);
+        }
+        .phone-flag {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 14px 14px;
+          border-right: 1.5px solid #e5e7eb;
+          background: #f9fafb;
+          font-size: 0.88rem;
+          color: #374151;
+          font-weight: 600;
+          white-space: nowrap;
+          cursor: default;
+        }
+        .phone-input {
+          flex: 1;
+          border: none;
+          outline: none;
+          padding: 14px 14px;
+          font-size: 1rem;
+          font-family: 'Inter', sans-serif;
+          color: #111827;
+          background: transparent;
+        }
+        .phone-input::placeholder { color: #9ca3af; }
+
+        /* Remember me */
+        .remember-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin: 14px 0 20px;
+          cursor: pointer;
+        }
+        .remember-checkbox {
+          width: 20px;
+          height: 20px;
+          border-radius: 5px;
+          border: 2px solid #1a5c38;
+          background: #1a5c38;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          transition: all 0.2s;
+        }
+        .remember-checkbox.unchecked {
+          background: #fff;
+          border-color: #d1d5db;
+        }
+        .remember-text {
+          font-size: 0.88rem;
+          color: #374151;
+          font-weight: 500;
+        }
+
+        /* Buttons */
+        .btn-continue {
+          width: 100%;
+          padding: 15px;
+          background: #1a5c38;
+          color: #fff;
+          border: none;
+          border-radius: 12px;
+          font-size: 1rem;
+          font-weight: 700;
+          font-family: 'Poppins', sans-serif;
+          cursor: pointer;
+          transition: background 0.2s, transform 0.1s;
+          letter-spacing: 0.3px;
+        }
+        .btn-continue:hover { background: #155030; }
+        .btn-continue:active { transform: scale(0.99); }
+        .btn-continue:disabled { background: #86b89a; cursor: not-allowed; }
+
+        .btn-google {
+          width: 100%;
+          padding: 13px;
+          background: #fff;
+          border: 1.5px solid #e5e7eb;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          font-size: 0.95rem;
+          font-weight: 600;
+          color: #374151;
+          cursor: pointer;
+          transition: background 0.2s, border-color 0.2s;
+          font-family: 'Inter', sans-serif;
+        }
+        .btn-google:hover { background: #f9fafb; border-color: #d1d5db; }
+
+        .btn-email {
+          width: 100%;
+          padding: 13px;
+          background: #fff;
+          border: 1.5px solid #e5e7eb;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          font-size: 0.95rem;
+          font-weight: 600;
+          color: #374151;
+          cursor: pointer;
+          transition: background 0.2s, border-color 0.2s;
+          font-family: 'Inter', sans-serif;
+        }
+        .btn-email:hover { background: #f9fafb; border-color: #d1d5db; }
+
+        /* Divider */
+        .or-divider {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin: 20px 0;
+          color: #9ca3af;
+          font-size: 0.82rem;
+          font-weight: 500;
+        }
+        .or-divider::before, .or-divider::after {
+          content: '';
+          flex: 1;
+          height: 1px;
+          background: #e5e7eb;
+        }
+
+        /* Form inputs */
+        .form-label {
+          display: block;
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: #6b7280;
+          text-transform: uppercase;
+          letter-spacing: 0.8px;
+          margin-bottom: 6px;
+        }
+        .form-input {
+          width: 100%;
+          padding: 13px 14px;
+          border: 1.5px solid #e5e7eb;
+          border-radius: 12px;
+          font-size: 0.95rem;
+          font-family: 'Inter', sans-serif;
+          color: #111827;
+          background: #fff;
+          outline: none;
+          transition: border-color 0.2s;
+          margin-bottom: 14px;
+        }
+        .form-input:focus {
+          border-color: #1a5c38;
+          box-shadow: 0 0 0 3px rgba(26,92,56,0.1);
+        }
+
+        /* Back button */
+        .back-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: none;
+          border: none;
+          cursor: pointer;
+          font-size: 0.88rem;
+          font-weight: 600;
+          color: #374151;
+          padding: 0;
+          margin-bottom: 20px;
+          font-family: 'Inter', sans-serif;
+        }
+        .back-btn:hover { color: #1a5c38; }
+
+        /* OTP boxes */
+        .otp-input {
+          width: 100%;
+          padding: 16px;
+          border: 1.5px solid #e5e7eb;
+          border-radius: 12px;
+          font-size: 1.8rem;
+          font-weight: 700;
+          letter-spacing: 14px;
+          text-align: center;
+          outline: none;
+          font-family: 'Poppins', sans-serif;
+          color: #1a5c38;
+          margin-bottom: 20px;
+          transition: border-color 0.2s;
+        }
+        .otp-input:focus {
+          border-color: #1a5c38;
+          box-shadow: 0 0 0 3px rgba(26,92,56,0.1);
+        }
+
+        /* Password strength */
+        .strength-bar {
+          display: flex;
+          gap: 4px;
+          height: 4px;
+          margin: 4px 0 6px;
+          border-radius: 2px;
+          overflow: hidden;
+        }
+        .strength-segment { flex: 1; background: #e5e7eb; border-radius: 2px; transition: background 0.3s; }
+
+        /* Terms */
+        .terms-text {
+          text-align: center;
+          font-size: 0.75rem;
+          color: #9ca3af;
+          margin-top: 20px;
+          line-height: 1.6;
+        }
+        .terms-text a { color: #1a5c38; text-decoration: none; font-weight: 600; }
+        .terms-text a:hover { text-decoration: underline; }
+
+        /* Switch link */
+        .switch-text {
+          text-align: center;
+          font-size: 0.85rem;
+          color: #6b7280;
+          margin-top: 16px;
+        }
+        .switch-text button {
+          background: none;
+          border: none;
+          color: #1a5c38;
+          font-weight: 700;
+          cursor: pointer;
+          font-size: 0.85rem;
+          font-family: 'Inter', sans-serif;
+          padding: 0;
+        }
+        .switch-text button:hover { text-decoration: underline; }
+
+        .section-heading {
+          font-family: 'Poppins', sans-serif;
+          font-size: 1.3rem;
+          font-weight: 700;
+          color: #111827;
+          margin-bottom: 4px;
+        }
+        .section-sub {
+          font-size: 0.85rem;
+          color: #6b7280;
+          margin-bottom: 22px;
+          line-height: 1.5;
+        }
+      `}</style>
+
+      <div className="login-page">
+        {/* Hero Section */}
+        <div className="login-hero">
+          <img src="/images/login-hero.jpg" alt="Fresh organic produce" onError={(e) => { e.target.style.display='none'; e.target.parentNode.style.background='linear-gradient(135deg, #1a5c38 0%, #2d6a4f 50%, #40916c 100%)'; }} />
+          <div className="login-hero-overlay">
+            <Link href="/" className="login-hero-logo">
+              <span className="leaf">🌿</span>
+              <span className="brand-name">Curify</span>
+            </Link>
+            <p className="login-hero-tagline">India's #1 Organic Grocery App</p>
+          </div>
         </div>
 
-        <h2 style={{ textAlign: 'center', fontSize: '1.25rem', marginBottom: '6px', fontWeight: '800', color: '#1a1a2e', fontFamily: "'Poppins', sans-serif" }}>
-          {activeTab === 'login' ? 'Welcome Back' : activeTab === 'register' ? 'Join Curify' : 'Secure OTP Login'}
-        </h2>
-        <p className="auth-subtitle" style={{ textAlign: 'center', color: '#718096', fontSize: '0.82rem', marginBottom: '20px' }}>
-          Protecting your session with advanced security standards.
-        </p>
+        {/* Card */}
+        <div className="login-card">
 
-        {/* Tab Switchers */}
-        <div className="auth-tabs" style={{ display: 'flex', gap: '4px', borderBottom: '1px solid #e2e8f0', marginBottom: '20px' }}>
-          <button 
-            className={`auth-tab ${activeTab === 'login' ? 'active' : ''}`} 
-            onClick={() => { setActiveTab('login'); setOtpSent(false); }}
-            style={{ flex: 1, padding: '10px 4px', background: 'none', border: 'none', cursor: 'pointer', borderBottom: activeTab === 'login' ? '2.5px solid #1a5c38' : 'none', fontWeight: activeTab === 'login' ? '700' : '500', color: activeTab === 'login' ? '#1a5c38' : '#718096', fontSize: '0.85rem' }}
-          >
-            Login
-          </button>
-          <button 
-            className={`auth-tab ${activeTab === 'phone' ? 'active' : ''}`} 
-            onClick={() => { setActiveTab('phone'); setOtpSent(false); }}
-            style={{ flex: 1, padding: '10px 4px', background: 'none', border: 'none', cursor: 'pointer', borderBottom: activeTab === 'phone' ? '2.5px solid #1a5c38' : 'none', fontWeight: activeTab === 'phone' ? '700' : '500', color: activeTab === 'phone' ? '#1a5c38' : '#718096', fontSize: '0.85rem' }}
-          >
-            Phone OTP
-          </button>
-          <button 
-            className={`auth-tab ${activeTab === 'register' ? 'active' : ''}`} 
-            onClick={() => { setActiveTab('register'); setOtpSent(false); }}
-            style={{ flex: 1, padding: '10px 4px', background: 'none', border: 'none', cursor: 'pointer', borderBottom: activeTab === 'register' ? '2.5px solid #1a5c38' : 'none', fontWeight: activeTab === 'register' ? '700' : '500', color: activeTab === 'register' ? '#1a5c38' : '#718096', fontSize: '0.85rem' }}
-          >
-            Register
-          </button>
-        </div>
+          {/* ─── MAIN VIEW ─── */}
+          {view === 'main' && (
+            <>
+              <p className="login-section-title">Log in or sign up</p>
 
-        {/* Google sign-in */}
-        {activeTab !== 'phone' && (
-          <div className="social-login" style={{ marginBottom: '18px' }}>
-            <button 
-              className="social-btn" 
-              onClick={handleGoogleLogin}
-              style={{ width: '100%', padding: '10px', border: '1.5px solid #cbd5e1', borderRadius: '8px', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: '600', fontSize: '0.85rem', color: '#334155', transition: 'background-color 0.2s' }}
-            >
-              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" alt="G" /> 
-              Continue with Google
-            </button>
-          </div>
-        )}
+              {/* Phone number login */}
+              <div className="phone-row">
+                <div className="phone-flag">🇮🇳 +91</div>
+                <input
+                  id="phone-login-input"
+                  className="phone-input"
+                  type="tel"
+                  maxLength={10}
+                  placeholder="Enter Mobile Number"
+                  value={phoneNum}
+                  onChange={(e) => setPhoneNum(e.target.value.replace(/[^0-9]/g, ''))}
+                />
+              </div>
 
-        {activeTab !== 'phone' && (
-          <div className="auth-divider" style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.78rem', margin: '14px 0', position: 'relative' }}>
-            <span style={{ background: '#fff', padding: '0 10px', position: 'relative', zIndex: 1, fontWeight: '500' }}>or use secure credentials</span>
-            <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: '1px', background: '#e2e8f0', zIndex: 0 }}></div>
-          </div>
-        )}
-
-        {/* Invisible ReCAPTCHA Container */}
-        <div id="recaptcha-container"></div>
-
-        {/* Login Form */}
-        {activeTab === 'login' && (
-          <form onSubmit={handleLoginSubmit}>
-            <div className="form-group" style={{ marginBottom: '14px' }}>
-              <label style={{ display: 'block', fontSize: '0.78rem', marginBottom: '5px', fontWeight: '700', color: '#475569' }}>EMAIL ADDRESS</label>
-              <input 
-                type="email" 
-                required 
-                placeholder="you@example.com"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                style={{ width: '100%', padding: '11px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-              />
-            </div>
-            <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '0.78rem', marginBottom: '5px', fontWeight: '700', color: '#475569' }}>PASSWORD</label>
-              <input 
-                type="password" 
-                required 
-                placeholder="Enter password"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                style={{ width: '100%', padding: '11px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-              />
-            </div>
-            <button 
-              type="submit" 
-              className="btn-primary" 
-              style={{ width: '100%', padding: '12px', background: 'linear-gradient(135deg, #1a5c38, #2d6a4f)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(26,92,56,0.18)' }}
-            >
-              Verify & Log In <i className="fas fa-shield-alt"></i>
-            </button>
-          </form>
-        )}
-
-        {/* Phone OTP Form */}
-        {activeTab === 'phone' && (
-          <div>
-            {!otpSent ? (
-              <form onSubmit={handleSendOtp}>
-                <div className="form-group" style={{ marginBottom: '20px' }}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', marginBottom: '5px', fontWeight: '700', color: '#475569' }}>MOBILE PHONE NUMBER</label>
-                  <input 
-                    type="tel" 
-                    required 
-                    placeholder="+91 9876543210"
-                    value={phoneNum}
-                    onChange={(e) => setPhoneNum(e.target.value)}
-                    style={{ width: '100%', padding: '11px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-                  />
-                  <small style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '4px', display: 'block' }}>Enter country code prefix (e.g. +91 for India).</small>
+              <label className="remember-row" htmlFor="rememberMe" onClick={() => setRememberMe(!rememberMe)}>
+                <div className={`remember-checkbox ${rememberMe ? '' : 'unchecked'}`}>
+                  {rememberMe && (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 6L5 9L10 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
                 </div>
-                <button 
-                  type="submit" 
-                  disabled={sendingOtp}
-                  style={{ width: '100%', padding: '12px', background: 'linear-gradient(135deg, #1a5c38, #2d6a4f)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: sendingOtp ? 0.8 : 1 }}
-                >
-                  {sendingOtp ? 'Verifying Recaptcha...' : 'Send Verification SMS'} 
-                  <i className="fas fa-paper-plane"></i>
+                <span className="remember-text">Remember my login for faster sign-in</span>
+              </label>
+
+              <button
+                id="phone-continue-btn"
+                className="btn-continue"
+                onClick={() => {
+                  if (!phoneNum || phoneNum.length < 10) {
+                    addToast('Please enter a valid 10-digit mobile number', 'error');
+                    return;
+                  }
+                  setView('phone');
+                  handleSendOtp({ preventDefault: () => {} });
+                }}
+              >
+                Continue
+              </button>
+
+              <div className="or-divider">or</div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button id="google-login-btn" className="btn-google" onClick={handleGoogleLogin} style={{ flex: 1 }}>
+                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" alt="Google" />
                 </button>
-              </form>
-            ) : (
-              <form onSubmit={handleVerifyOtp}>
-                <div className="form-group" style={{ marginBottom: '20px' }}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', marginBottom: '5px', fontWeight: '700', color: '#475569' }}>6-DIGIT VERIFICATION CODE</label>
-                  <input 
-                    type="text" 
-                    required 
-                    maxLength="6"
-                    placeholder="123456"
+                <button id="email-login-btn" className="btn-email" onClick={() => setView('email')} style={{ flex: 1 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                    <polyline points="22,6 12,13 2,6"/>
+                  </svg>
+                </button>
+              </div>
+
+              <p className="terms-text">
+                By continuing, you agree to our{' '}
+                <a href="#">Terms of Service</a>{' '}
+                <a href="#">Privacy Policy</a>{' '}
+                <a href="#">Content Policy</a>
+              </p>
+
+              <div id="recaptcha-container"></div>
+            </>
+          )}
+
+          {/* ─── PHONE OTP VIEW ─── */}
+          {view === 'phone' && (
+            <>
+              <button className="back-btn" onClick={() => { setView('main'); setOtpSent(false); setOtpCode(''); }}>
+                ← Back
+              </button>
+
+              {!otpSent ? (
+                <>
+                  <p className="section-heading">Verify your number</p>
+                  <p className="section-sub">Sending OTP to +91 {phoneNum}...</p>
+                  <button className="btn-continue" disabled style={{ opacity: 0.7 }}>Sending OTP...</button>
+                </>
+              ) : (
+                <form onSubmit={handleVerifyOtp}>
+                  <p className="section-heading">Enter OTP</p>
+                  <p className="section-sub">We sent a 6-digit code to +91 {phoneNum}</p>
+
+                  <input
+                    id="otp-input"
+                    className="otp-input"
+                    type="text"
+                    maxLength={6}
+                    placeholder="——————"
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
-                    style={{ width: '100%', padding: '11px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '1.1rem', letterSpacing: '8px', textAlign: 'center', outline: 'none' }}
+                    autoFocus
                   />
-                </div>
-                <button 
-                  type="submit" 
-                  disabled={verifyingOtp}
-                  style={{ width: '100%', padding: '12px', background: 'linear-gradient(135deg, #e05a2b, #f77f00)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: verifyingOtp ? 0.8 : 1 }}
-                >
-                  {verifyingOtp ? 'Verifying Code...' : 'Submit OTP Code'} 
-                  <i className="fas fa-check-circle"></i>
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => setOtpSent(false)}
-                  style={{ width: '100%', marginTop: '12px', padding: '10px', background: 'none', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.82rem', fontWeight: '600', color: '#64748b', cursor: 'pointer' }}
-                >
-                  Change Phone Number
+
+                  <button id="verify-otp-btn" type="submit" className="btn-continue" disabled={verifyingOtp}>
+                    {verifyingOtp ? 'Verifying...' : 'Verify OTP'}
+                  </button>
+
+                  <div className="switch-text" style={{ marginTop: '16px' }}>
+                    Didn't receive OTP?{' '}
+                    <button type="button" onClick={() => { setOtpSent(false); handleSendOtp({ preventDefault: () => {} }); }}>
+                      Resend
+                    </button>
+                  </div>
+                </form>
+              )}
+              <div id="recaptcha-container"></div>
+            </>
+          )}
+
+          {/* ─── EMAIL LOGIN VIEW ─── */}
+          {view === 'email' && (
+            <>
+              <button className="back-btn" onClick={() => setView('main')}>← Back</button>
+              <p className="section-heading">Log in with email</p>
+              <p className="section-sub">Enter your email and password to continue</p>
+
+              <form onSubmit={handleLoginSubmit}>
+                <label className="form-label">Email Address</label>
+                <input
+                  id="login-email"
+                  className="form-input"
+                  type="email"
+                  required
+                  placeholder="you@example.com"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                />
+                <label className="form-label">Password</label>
+                <input
+                  id="login-password"
+                  className="form-input"
+                  type="password"
+                  required
+                  placeholder="Enter your password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                />
+                <button id="email-login-submit" type="submit" className="btn-continue">
+                  Log In
                 </button>
               </form>
-            )}
-          </div>
-        )}
 
-        {/* Register Form */}
-        {activeTab === 'register' && (
-          <form onSubmit={handleRegisterSubmit}>
-            <div className="form-group" style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', fontSize: '0.78rem', marginBottom: '4px', fontWeight: '700', color: '#475569' }}>FULL NAME</label>
-              <input 
-                type="text" 
-                required 
-                placeholder="John Doe"
-                value={regName}
-                onChange={(e) => setRegName(e.target.value)}
-                style={{ width: '100%', padding: '10px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-              />
-            </div>
-            <div className="form-group" style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', fontSize: '0.78rem', marginBottom: '4px', fontWeight: '700', color: '#475569' }}>EMAIL ADDRESS</label>
-              <input 
-                type="email" 
-                required 
-                placeholder="you@example.com"
-                value={regEmail}
-                onChange={(e) => setRegEmail(e.target.value)}
-                style={{ width: '100%', padding: '10px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-              />
-            </div>
-            <div className="form-group" style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', fontSize: '0.78rem', marginBottom: '4px', fontWeight: '700', color: '#475569' }}>PHONE (OPTIONAL)</label>
-              <input 
-                type="tel" 
-                placeholder="9876543210"
-                value={regPhone}
-                onChange={(e) => setRegPhone(e.target.value)}
-                style={{ width: '100%', padding: '10px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-              />
-            </div>
-            <div className="form-group" style={{ marginBottom: '6px' }}>
-              <label style={{ display: 'block', fontSize: '0.78rem', marginBottom: '4px', fontWeight: '700', color: '#475569' }}>CREATE PASSWORD</label>
-              <input 
-                type="password" 
-                required 
-                placeholder="Min 8 characters, capital, number, symbol"
-                value={regPassword}
-                onChange={handlePasswordChange}
-                style={{ width: '100%', padding: '10px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-              />
-            </div>
+              <div className="or-divider">or</div>
+              <button id="google-login-btn-2" className="btn-google" onClick={handleGoogleLogin}>
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" alt="Google" />
+                Continue with Google
+              </button>
 
-            {/* Password strength meter */}
-            {regPassword && (
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ display: 'flex', gap: '4px', height: '4px', marginTop: '6px', borderRadius: '2px', overflow: 'hidden', background: '#e2e8f0' }}>
-                  <div style={{ flex: 1, background: passwordStrength.score >= 1 ? passwordStrength.color : '#e2e8f0' }}></div>
-                  <div style={{ flex: 1, background: passwordStrength.score >= 2 ? passwordStrength.color : '#e2e8f0' }}></div>
-                  <div style={{ flex: 1, background: passwordStrength.score >= 3 ? passwordStrength.color : '#e2e8f0' }}></div>
-                  <div style={{ flex: 1, background: passwordStrength.score >= 4 ? passwordStrength.color : '#e2e8f0' }}></div>
-                </div>
-                <div style={{ fontSize: '0.72rem', color: passwordStrength.color, marginTop: '4px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Security Strength: {passwordStrength.text}</span>
-                  {passwordStrength.score < 3 && <span style={{ color: '#ef4444' }}>Must be Medium or Strong</span>}
-                </div>
+              <div className="switch-text">
+                New to Curify?{' '}
+                <button onClick={() => setView('register')}>Create Account</button>
               </div>
-            )}
+            </>
+          )}
 
-            <button 
-              type="submit" 
-              className="btn-primary" 
-              style={{ width: '100%', padding: '12px', background: 'linear-gradient(135deg, #1a5c38, #2d6a4f)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '12px', boxShadow: '0 4px 12px rgba(26,92,56,0.18)' }}
-            >
-              Secure Register & Verify <i className="fas fa-user-plus"></i>
-            </button>
-          </form>
-        )}
+          {/* ─── REGISTER VIEW ─── */}
+          {view === 'register' && (
+            <>
+              <button className="back-btn" onClick={() => setView('email')}>← Back</button>
+              <p className="section-heading">Create Account</p>
+              <p className="section-sub">Join Curify and start shopping fresh organics</p>
+
+              <form onSubmit={handleRegisterSubmit}>
+                <label className="form-label">Full Name</label>
+                <input
+                  id="reg-name"
+                  className="form-input"
+                  type="text"
+                  required
+                  placeholder="Your full name"
+                  value={regName}
+                  onChange={(e) => setRegName(e.target.value)}
+                />
+
+                <label className="form-label">Email Address</label>
+                <input
+                  id="reg-email"
+                  className="form-input"
+                  type="email"
+                  required
+                  placeholder="you@example.com"
+                  value={regEmail}
+                  onChange={(e) => setRegEmail(e.target.value)}
+                />
+
+                <label className="form-label">Phone (Optional)</label>
+                <input
+                  id="reg-phone"
+                  className="form-input"
+                  type="tel"
+                  placeholder="10-digit mobile number"
+                  value={regPhone}
+                  onChange={(e) => setRegPhone(e.target.value)}
+                />
+
+                <label className="form-label">Create Password</label>
+                <input
+                  id="reg-password"
+                  className="form-input"
+                  type="password"
+                  required
+                  placeholder="Min 8 chars with number & capital"
+                  value={regPassword}
+                  onChange={handlePasswordChange}
+                  style={{ marginBottom: '6px' }}
+                />
+
+                {regPassword && (
+                  <div style={{ marginBottom: '14px' }}>
+                    <div className="strength-bar">
+                      {[1,2,3,4].map(i => (
+                        <div key={i} className="strength-segment" style={{ background: passwordStrength.score >= i ? passwordStrength.color : '#e5e7eb' }} />
+                      ))}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: passwordStrength.color, fontWeight: '600', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Strength: {passwordStrength.text}</span>
+                      {passwordStrength.score < 3 && <span style={{ color: '#ef4444' }}>Needs stronger password</span>}
+                    </div>
+                  </div>
+                )}
+
+                <button id="register-submit" type="submit" className="btn-continue">
+                  Create Account
+                </button>
+              </form>
+
+              <div className="switch-text">
+                Already have an account?{' '}
+                <button onClick={() => setView('email')}>Log In</button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
