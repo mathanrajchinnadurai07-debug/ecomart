@@ -551,6 +551,56 @@ export default function Checkout() {
         .success-btn { text-decoration: none; padding: 12px 20px; border-radius: 10px; font-size: 0.85rem; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
         .success-btn.primary { background: linear-gradient(135deg, #1a5c38, #2d6a4f); color: #fff; box-shadow: 0 3px 8px rgba(26,92,56,0.18); }
         .success-btn.outline { border: 1.5px solid #1a5c38; color: #1a5c38; background: #fff; }
+
+        /* ── Flipkart-style Payment Page ── */
+        .fk-pay-page { background: #f1f3f6; font-family: 'Inter', sans-serif; padding-bottom: 32px; margin: -16px -12px; }
+        .fk-pay-header { background: #fff; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; position: sticky; top: 0; z-index: 10; }
+        .fk-pay-header-left { display: flex; align-items: center; gap: 12px; }
+        .fk-back-btn { background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; color: #212121; }
+        .fk-header-title { font-size: 0.78rem; color: #878787; font-weight: 400; line-height: 1.2; }
+        .fk-header-title strong { font-size: 1rem; color: #212121; display: block; font-weight: 700; }
+        .fk-secure-badge { display: flex; align-items: center; gap: 5px; font-size: 0.78rem; color: #878787; }
+        .fk-total-bar { background: #fff; margin: 10px 12px; border-radius: 8px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 4px rgba(0,0,0,0.08); cursor: pointer; }
+        .fk-total-label { font-size: 0.95rem; font-weight: 600; color: #2874f0; display: flex; align-items: center; gap: 6px; }
+        .fk-total-amount { font-size: 1.05rem; font-weight: 700; color: #212121; }
+        .fk-accordion-section { background: #fff; margin: 0 12px 8px; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+        .fk-accordion-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; cursor: pointer; border-bottom: 1px solid transparent; transition: border-color 0.2s; user-select: none; }
+        .fk-accordion-header.open { border-bottom-color: #f0f0f0; }
+        .fk-acc-left { display: flex; align-items: center; gap: 12px; }
+        .fk-acc-icon { width: 36px; height: 36px; border-radius: 6px; background: #f5f5f5; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .fk-acc-title { font-size: 0.95rem; font-weight: 600; color: #212121; line-height: 1.2; }
+        .fk-acc-sub { font-size: 0.78rem; color: #878787; margin-top: 2px; }
+        .fk-acc-offer { font-size: 0.78rem; color: #388e3c; font-weight: 600; margin-top: 2px; }
+        .fk-acc-chevron { color: #878787; transition: transform 0.25s; }
+        .fk-acc-chevron.open { transform: rotate(180deg); }
+        .fk-accordion-body { padding: 16px; }
+        .fk-upi-option { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #f5f5f5; cursor: pointer; }
+        .fk-upi-option:last-child { border-bottom: none; }
+        .fk-upi-left { display: flex; align-items: center; gap: 12px; }
+        .fk-radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #d4d4d4; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: border-color 0.2s; }
+        .fk-radio.selected { border-color: #2874f0; }
+        .fk-radio-dot { width: 10px; height: 10px; border-radius: 50%; background: #2874f0; }
+        .fk-upi-name { font-size: 0.9rem; color: #212121; font-weight: 500; }
+        .fk-card-note { font-size: 0.8rem; color: #555; margin-bottom: 14px; line-height: 1.5; }
+        .fk-card-note a { color: #2874f0; text-decoration: none; font-weight: 600; }
+        .fk-card-input-wrap { background: #fff; border: 1px solid #d4d4d4; border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; }
+        .fk-card-input-wrap label { font-size: 0.75rem; color: #878787; display: block; margin-bottom: 4px; }
+        .fk-card-input { width: 100%; border: none; outline: none; font-size: 0.95rem; font-family: 'Inter', sans-serif; color: #212121; background: transparent; }
+        .fk-card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .fk-pay-btn { width: 100%; padding: 14px; background: #fb641b; color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: 700; cursor: pointer; font-family: 'Poppins', sans-serif; margin-top: 16px; letter-spacing: 0.3px; transition: background 0.2s; }
+        .fk-pay-btn:hover { background: #f4581c; }
+        .fk-pay-btn:active { transform: scale(0.99); }
+        .fk-pay-btn:disabled { background: #f0c4a8; cursor: not-allowed; }
+        .fk-cod-body { padding: 16px; }
+        .fk-cod-warn { background: #fff8e7; border: 1px solid #ffe0a3; border-radius: 6px; padding: 12px; font-size: 0.82rem; color: #7a4f00; margin-bottom: 16px; line-height: 1.5; }
+        .fk-place-order-btn { width: 100%; padding: 14px; background: #fb641b; color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: 700; cursor: pointer; font-family: 'Poppins', sans-serif; letter-spacing: 0.3px; transition: background 0.2s; }
+        .fk-place-order-btn:hover { background: #f4581c; }
+        .fk-place-order-btn:disabled { background: #f0c4a8; cursor: not-allowed; }
+        .fk-unavail-section { background: #fff; margin: 0 12px 8px; border-radius: 8px; padding: 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 4px rgba(0,0,0,0.06); opacity: 0.6; }
+        .fk-unavail-left { display: flex; align-items: center; gap: 12px; }
+        .fk-unavail-title { font-size: 0.9rem; color: #212121; font-weight: 500; }
+        .fk-unavail-badge { font-size: 0.78rem; color: #878787; display: flex; align-items: center; gap: 4px; }
+        .fk-footer { text-align: center; padding: 24px 16px; font-size: 0.82rem; color: #878787; line-height: 1.8; }
       `}</style>
 
       {/* Header Panel */}
@@ -734,83 +784,191 @@ export default function Checkout() {
             </div>
           )}
 
-          {/* STEP 3: Payment Details Option */}
+          {/* STEP 3: Flipkart-style Payment Page */}
           {currentStep === 3 && (
-            <div className="co-step">
-              {/* Delivery Summary Block */}
-              <div className="co-card" style={{ marginBottom: '16px', padding: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #e8f5e9', paddingBottom: '8px' }}>
-                  <strong style={{ fontSize: '0.9rem', color: '#1a5c38', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <i className="fas fa-truck"></i> Shipping Information Summary
-                  </strong>
-                  <span style={{ fontSize: '0.78rem', color: '#e05a2b', cursor: 'pointer', fontWeight: '700' }} onClick={() => handleGoStep(2)}>
-                    Change
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.82rem', color: '#334155', display: 'flex', flexDirection: 'column', gap: '6px', lineHeight: '1.4' }}>
-                  <div><strong>Recipient:</strong> {formData.firstName} {formData.lastName}</div>
-                  <div>
-                    <strong>Address:</strong> {maskDataEnabled ? maskAddressLine(formData.address1) : formData.address1}
-                    {formData.address2 && `, ${maskDataEnabled ? maskAddressLine(formData.address2) : formData.address2}`}
-                    {`, ${formData.city}, ${formData.state} - `}
-                    {maskDataEnabled ? maskPincode(formData.pincode) : formData.pincode}
+            <div className="fk-pay-page">
+              {/* Sticky header */}
+              <div className="fk-pay-header">
+                <div className="fk-pay-header-left">
+                  <button className="fk-back-btn" onClick={() => handleGoStep(2)}>
+                    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                  </button>
+                  <div className="fk-header-title">
+                    Step 3 of 3
+                    <strong>Payments</strong>
                   </div>
-                  <div><strong>Phone:</strong> {maskDataEnabled ? maskPhone(formData.phone) : formData.phone}</div>
-                  <div><strong>Email:</strong> {maskDataEnabled ? maskEmail(formData.email) : formData.email}</div>
+                </div>
+                <div className="fk-secure-badge">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#388e3c" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  100% Secure
                 </div>
               </div>
 
-              <div className="co-card">
-                <div className="co-card-title">
-                  <i className="fas fa-credit-card"></i> Select Payment Method
+              {/* Total Amount Bar */}
+              <div className="fk-total-bar">
+                <div className="fk-total-label">
+                  Total Amount
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
                 </div>
-                
-                <div className="pay-opts">
-                  <div className={`pay-opt ${paymentMethod === 'razorpay' ? 'selected' : ''}`} onClick={() => setPaymentMethod('razorpay')}>
-                    <div className="po-check"><i className="fas fa-check"></i></div>
-                    <div className="po-icon">💳</div>
-                    <div className="po-name">Credit / Debit Card</div>
+                <div className="fk-total-amount">₹{grandTotal}</div>
+              </div>
+
+              {paymentMethod === 'cod' && (
+                <div style={{ margin: '0 12px 8px', background: '#fff8e7', border: '1px solid #ffe0a3', borderRadius: '8px', padding: '12px 16px', fontSize: '0.82rem', color: '#7a4f00', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <span>⚠️ Avoid COD fee. <strong>Pay online and save ₹25</strong></span>
+                  <button style={{ background: '#fb641b', color: '#fff', border: 'none', borderRadius: '4px', padding: '6px 12px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', flexShrink: 0 }} onClick={() => setPaymentMethod('upi')}>
+                    Pay Online
+                  </button>
+                </div>
+              )}
+
+              {/* ── UPI Accordion ── */}
+              <div className="fk-accordion-section">
+                <div
+                  className={`fk-accordion-header ${['upi','gpay','phonepe','paytm'].includes(paymentMethod) ? 'open' : ''}`}
+                  onClick={() => setPaymentMethod(['upi','gpay','phonepe','paytm'].includes(paymentMethod) ? '' : 'upi')}
+                >
+                  <div className="fk-acc-left">
+                    <div className="fk-acc-icon">
+                      <span style={{ fontWeight: '800', fontSize: '0.72rem', color: '#555', border: '2px solid #555', padding: '1px 4px', borderRadius: '3px' }}>UPI</span>
+                    </div>
+                    <div>
+                      <div className="fk-acc-title">UPI</div>
+                      <div className="fk-acc-sub">Pay by any UPI app</div>
+                    </div>
                   </div>
-                  <div className={`pay-opt ${paymentMethod === 'gpay' ? 'selected' : ''}`} onClick={() => setPaymentMethod('gpay')}>
-                    <div className="po-check"><i className="fas fa-check"></i></div>
-                    <div className="po-icon">📱</div>
-                    <div className="po-name">Google Pay / UPI</div>
+                  <svg className={`fk-acc-chevron ${['upi','gpay','phonepe','paytm'].includes(paymentMethod) ? 'open' : ''}`} width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+                </div>
+
+                {['upi','gpay','phonepe','paytm'].includes(paymentMethod) && (
+                  <div style={{ padding: '8px 16px 16px' }}>
+                    {[
+                      { id: 'gpay',    name: 'Google Pay',   emoji: '🟢' },
+                      { id: 'phonepe', name: 'PhonePe',      emoji: '🟣' },
+                      { id: 'paytm',   name: 'Paytm UPI',   emoji: '🔵' },
+                      { id: 'upi',     name: 'Other UPI App',emoji: '📱' },
+                    ].map(opt => (
+                      <div key={opt.id} className="fk-upi-option" onClick={() => setPaymentMethod(opt.id)}>
+                        <div className="fk-upi-left">
+                          <div className={`fk-radio ${paymentMethod === opt.id ? 'selected' : ''}`}>
+                            {paymentMethod === opt.id && <div className="fk-radio-dot"></div>}
+                          </div>
+                          <span className="fk-upi-name">{opt.emoji} {opt.name}</span>
+                        </div>
+                      </div>
+                    ))}
+                    <button id="upi-pay-btn" className="fk-pay-btn" disabled={isLoadingPayment} onClick={handlePlaceOrder}>
+                      {isLoadingPayment ? 'Processing...' : `Pay ₹${grandTotal}`}
+                    </button>
                   </div>
-                  <div className={`pay-opt ${paymentMethod === 'cod' ? 'selected' : ''}`} onClick={() => setPaymentMethod('cod')}>
-                    <div className="po-check"><i className="fas fa-check"></i></div>
-                    <div className="po-icon">💵</div>
-                    <div className="po-name">Cash on Delivery</div>
+                )}
+              </div>
+
+              {/* ── Credit / Debit Card Accordion ── */}
+              <div className="fk-accordion-section">
+                <div
+                  className={`fk-accordion-header ${paymentMethod === 'razorpay' ? 'open' : ''}`}
+                  onClick={() => setPaymentMethod(paymentMethod === 'razorpay' ? '' : 'razorpay')}
+                >
+                  <div className="fk-acc-left">
+                    <div className="fk-acc-icon">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                    </div>
+                    <div>
+                      <div className="fk-acc-title">Credit / Debit / ATM Card</div>
+                      <div className="fk-acc-sub">Add and secure cards as per RBI guidelines</div>
+                      <div className="fk-acc-offer">Get upto 5% cashback • 2 offers available</div>
+                    </div>
                   </div>
+                  <svg className={`fk-acc-chevron ${paymentMethod === 'razorpay' ? 'open' : ''}`} width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+                </div>
+
+                {paymentMethod === 'razorpay' && (
+                  <div className="fk-accordion-body">
+                    <p className="fk-card-note">
+                      <strong>Note:</strong> Please ensure your card can be used for online transactions. <a href="#">Learn More</a>
+                    </p>
+                    <div className="fk-card-input-wrap">
+                      <label>Card Number</label>
+                      <input className="fk-card-input" type="text" placeholder="XXXX XXXX XXXX XXXX" readOnly />
+                    </div>
+                    <div className="fk-card-row">
+                      <div className="fk-card-input-wrap">
+                        <label>Valid Thru</label>
+                        <input className="fk-card-input" type="text" placeholder="MM / YY" readOnly />
+                      </div>
+                      <div className="fk-card-input-wrap">
+                        <label>CVV</label>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <input className="fk-card-input" type="text" placeholder="CVV" readOnly />
+                          <svg width="18" height="18" fill="none" stroke="#878787" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                        </div>
+                      </div>
+                    </div>
+                    <p style={{ fontSize: '0.75rem', color: '#388e3c', fontWeight: '600', marginBottom: '4px' }}>
+                      🔒 Your card details are securely handled by Razorpay
+                    </p>
+                    <button id="card-pay-btn" className="fk-pay-btn" disabled={isLoadingPayment} onClick={handlePlaceOrder}>
+                      {isLoadingPayment ? 'Opening Payment...' : `Pay ₹${grandTotal}`}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Cash on Delivery Accordion ── */}
+              <div className="fk-accordion-section">
+                <div
+                  className={`fk-accordion-header ${paymentMethod === 'cod' ? 'open' : ''}`}
+                  onClick={() => setPaymentMethod(paymentMethod === 'cod' ? '' : 'cod')}
+                >
+                  <div className="fk-acc-left">
+                    <div className="fk-acc-icon">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>
+                    </div>
+                    <div><div className="fk-acc-title">Cash on Delivery</div></div>
+                  </div>
+                  <svg className={`fk-acc-chevron ${paymentMethod === 'cod' ? 'open' : ''}`} width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
                 </div>
 
                 {paymentMethod === 'cod' && (
-                  <div className="cod-note">
-                    <i className="fas fa-info-circle" style={{ marginTop: '2px', fontSize: '0.9rem' }}></i>
-                    <span>Cash on Delivery is selected. Note: An extra ₹25 processing fee will be added. Please keep exact change ready.</span>
-                  </div>
-                )}
-
-                {isLoadingPayment ? (
-                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                    <i className="fas fa-spinner fa-spin" style={{ fontSize: '2.2rem', color: '#1a5c38' }}></i>
-                    <p style={{ marginTop: '10px', fontSize: '0.88rem', color: '#555', fontWeight: '500' }}>
-                      Processing secure payment transaction...
-                    </p>
-                  </div>
-                ) : (
-                  <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#888', marginTop: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                    <i className="fas fa-shield-alt" style={{ color: '#15803d' }}></i> Secure Payment Gateway · 256-bit SSL Encrypted
+                  <div className="fk-cod-body">
+                    <div className="fk-cod-warn">
+                      ⚠️ Extra ₹25 COD fee will be added. Total: <strong>₹{grandTotal}</strong>. Please keep exact change ready.
+                    </div>
+                    <button id="cod-place-order-btn" className="fk-place-order-btn" disabled={isLoadingPayment} onClick={handlePlaceOrder}>
+                      {isLoadingPayment ? 'Placing Order...' : 'Place Order'}
+                    </button>
                   </div>
                 )}
               </div>
 
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button className="btn-checkout-back" onClick={() => handleGoStep(2)} disabled={isLoadingPayment}>
-                  <i className="fas fa-arrow-left"></i> Back
-                </button>
-                <button className="btn-pay-secure" onClick={handlePlaceOrder} disabled={isLoadingPayment}>
-                  <i className="fas fa-lock"></i> Pay Securely <span>₹{grandTotal}</span>
-                </button>
+              {/* ── EMI — Unavailable ── */}
+              <div className="fk-unavail-section">
+                <div className="fk-unavail-left">
+                  <span style={{ fontSize: '1.1rem' }}>📅</span>
+                  <span className="fk-unavail-title">EMI</span>
+                </div>
+                <div className="fk-unavail-badge">
+                  Unavailable <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                </div>
+              </div>
+
+              {/* ── Pay In 3 — Unavailable ── */}
+              <div className="fk-unavail-section">
+                <div className="fk-unavail-left">
+                  <span style={{ fontSize: '1.1rem' }}>⏱️</span>
+                  <span className="fk-unavail-title">Pay In 3</span>
+                </div>
+                <div className="fk-unavail-badge">
+                  Unavailable <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                </div>
+              </div>
+
+              {/* ── Footer ── */}
+              <div className="fk-footer">
+                <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🙂</div>
+                <div>Trusted by <strong>Lakhs</strong> of happy customers</div>
+                <div>and counting!</div>
               </div>
             </div>
           )}
