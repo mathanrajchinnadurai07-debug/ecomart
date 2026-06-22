@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const { deleteCachePattern } = require('../config/redis');
 const admin = require('firebase-admin');
+const crypto = require('crypto');
 const { createShiprocketOrder } = require('../config/shiprocket');
 const { sendOrderConfirmationEmail } = require('../utils/email');
 const { createDeliveryJobs, sendDeliveryNotifications } = require('../services/deliveryService');
@@ -9,10 +10,34 @@ const { createDeliveryJobs, sendDeliveryNotifications } = require('../services/d
 const createOrder = async (req, res, next) => {
   const client = await db.getClient();
   try {
-    const { user_id, items, total_amount, address, status, payment_id } = req.body;
+    const { user_id, items, total_amount, address, status, payment_id, razorpay_order_id, razorpay_signature } = req.body;
 
     if (!user_id || !items || !items.length || !total_amount) {
       return res.status(400).json({ success: false, error: 'user_id, items, and total_amount are required' });
+    }
+
+    // MANDATORY: Verify Razorpay signature if order status is requested as 'paid'
+    if (status === 'paid') {
+      if (!payment_id || !razorpay_order_id || !razorpay_signature) {
+        return res.status(400).json({ success: false, error: 'Missing Razorpay signature fields for paid order' });
+      }
+      
+      const keySecret = process.env.RAZORPAY_KEY_SECRET;
+      
+      // Fail closed if key is missing
+      if (!keySecret) {
+        return res.status(500).json({ success: false, error: 'Payment gateway not configured (missing secret)' });
+      }
+
+      const body = razorpay_order_id + '|' + payment_id;
+      const expectedSignature = crypto
+        .createHmac('sha256', keySecret)
+        .update(body)
+        .digest('hex');
+
+      if (expectedSignature !== razorpay_signature) {
+        return res.status(400).json({ success: false, error: 'Invalid payment signature' });
+      }
     }
 
     await client.query('BEGIN');
@@ -48,9 +73,9 @@ const createOrder = async (req, res, next) => {
     // Create the order
     const initialStatus = status || 'pending';
     const { rows } = await client.query(
-      `INSERT INTO orders (user_id, items, total_amount, address, status, payment_id)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [user_id, JSON.stringify(items), total_amount, JSON.stringify(address || {}), initialStatus, payment_id || null]
+      `INSERT INTO orders (user_id, items, total_amount, address, status, payment_id, razorpay_order_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [user_id, JSON.stringify(items), total_amount, JSON.stringify(address || {}), initialStatus, payment_id || null, razorpay_order_id || null]
     );
 
     // Calculate eco-points (1 point per ₹100 spent)

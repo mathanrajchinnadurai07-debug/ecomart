@@ -16,11 +16,7 @@ export default function Checkout() {
   const [discountPercent, setDiscountPercent] = useState(0);
   const [confirmedOrder, setConfirmedOrder] = useState(null);
   const [isLoadingPayment, setIsLoadingPayment] = useState(false);
-  const [showMockPaymentModal, setShowMockPaymentModal] = useState(false);
-  const [mockPaymentPayload, setMockPaymentPayload] = useState(null);
-  const [mockCardDetails, setMockCardDetails] = useState({ number: '', expiry: '', cvv: '', name: '' });
-  const [mockUpiId, setMockUpiId] = useState('');
-  const [processingMockPay, setProcessingMockPay] = useState(false);
+
   const [maskDataEnabled, setMaskDataEnabled] = useState(true);
 
   useEffect(() => {
@@ -227,13 +223,7 @@ export default function Checkout() {
           throw new Error(razorpayOrder.error || 'Failed to create payment order');
         }
 
-        // Dev mode (no Razorpay keys configured) - simulate payment via mock modal
-        if (razorpayOrder._dev_mode) {
-          setMockPaymentPayload(orderPayload);
-          setShowMockPaymentModal(true);
-          setIsLoadingPayment(false);
-          return;
-        }
+
 
         // Open Razorpay checkout modal
         const options = {
@@ -250,29 +240,43 @@ export default function Checkout() {
           },
           theme: { color: '#1a5c38' },
           handler: async function (paymentResponse) {
-            // Verify payment on server
+            setIsLoadingPayment(true);
             try {
-              const verifyRes = await fetch(`/api/verify-payment`, {
+              // Prepare the final payload for the backend
+              const backendPayload = {
+                user_id: user ? user.uid : 'guest',
+                items: orderPayload.items,
+                total_amount: orderPayload.total,
+                address: orderPayload.address,
+                status: 'paid',
+                payment_id: paymentResponse.razorpay_payment_id,
+                razorpay_order_id: paymentResponse.razorpay_order_id,
+                razorpay_signature: paymentResponse.razorpay_signature
+              };
+
+              const createRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/orders`, {
                 method: 'POST',
                 headers: { 
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify(paymentResponse)
+                body: JSON.stringify(backendPayload)
               });
-              const verifyData = await verifyRes.json();
+              
+              const createData = await createRes.json();
 
-              if (verifyData.verified) {
-                orderPayload.payment.transactionId = paymentResponse.razorpay_payment_id;
-                orderPayload.payment.status = 'paid';
-                await saveOrderToFirestore(orderPayload);
-                addToast('Payment successful! 🎉', 'success');
+              if (createData.success) {
+                // Clear cart via context
+                clearCart();
+                setConfirmedOrder(orderPayload);
+                setCurrentStep(4);
+                addToast('Payment successful & Order placed! 🎉', 'success');
               } else {
-                addToast('Payment verification failed. Contact support.', 'error');
+                addToast(createData.error || 'Failed to process order on server.', 'error');
               }
             } catch (err) {
-              console.error('Verify error:', err);
-              addToast('Payment verification error. Contact support.', 'error');
+              console.error('Order creation error:', err);
+              addToast('Order processing error. Contact support.', 'error');
             }
             setIsLoadingPayment(false);
           },
@@ -301,73 +305,51 @@ export default function Checkout() {
     }
   };
 
-  const handleConfirmMockPayment = async () => {
-    if (paymentMethod === 'razorpay') {
-      if (!mockCardDetails.number || !mockCardDetails.expiry || !mockCardDetails.cvv) {
-        addToast('Please fill all card details', 'error');
-        return;
-      }
-      if (mockCardDetails.number.replace(/\s/g, '').length !== 16) {
-        addToast('Card number must be 16 digits', 'error');
-        return;
-      }
-    } else if (paymentMethod === 'gpay') {
-      if (!mockUpiId.trim() || !mockUpiId.includes('@')) {
-        addToast('Please enter a valid UPI ID (e.g. name@okhdfcbank)', 'error');
-        return;
-      }
-    }
 
-    setProcessingMockPay(true);
-    setTimeout(async () => {
-      try {
-        const payload = { ...mockPaymentPayload };
-        payload.payment.transactionId = 'pay_dev_' + Date.now().toString().slice(-8);
-        payload.payment.status = 'paid';
-        
-        await saveOrderToFirestore(payload);
-        
-        setShowMockPaymentModal(false);
-        setProcessingMockPay(false);
-        addToast('Payment Successful! 🎉', 'success');
-      } catch (e) {
-        console.error(e);
-        addToast('Mock payment execution failed', 'error');
-        setProcessingMockPay(false);
-      }
-    }, 2000);
-  };
 
   const saveOrderToFirestore = async (orderPayload) => {
     try {
-      // Save the order directly to Firestore to bypass external backend needs
-      const userRef = doc(db, 'users', user.uid);
-      const orderRef = doc(collection(userRef, 'orders'), orderPayload.orderId);
-      
-      const firestoreData = {
-        ...orderPayload,
-        updated_at: serverTimestamp(),
+      let token = 'firebase_guest';
+      if (auth.currentUser) {
+        try {
+          token = await auth.currentUser.getIdToken();
+        } catch (e) {
+          token = localStorage.getItem('Curify_token') || 'firebase_guest';
+        }
+      } else {
+        token = localStorage.getItem('Curify_token') || 'firebase_guest';
+      }
+
+      const backendPayload = {
+        user_id: user ? user.uid : 'guest',
+        items: orderPayload.items,
+        total_amount: orderPayload.total,
+        address: orderPayload.address,
+        status: orderPayload.payment.method === 'cod' ? 'processing' : 'pending',
+        payment_id: orderPayload.payment.transactionId || null,
       };
-      
-      await setDoc(orderRef, firestoreData);
-      
-      // Save global order reference
-      const globalOrderRef = doc(db, 'orders', orderPayload.orderId);
-      await setDoc(globalOrderRef, firestoreData);
 
-      // Clear firestore cart
-      const batch = writeBatch(db);
-      const cartCollectionRef = collection(db, 'users', user.uid, 'cart');
-      const cartSnap = await getDocs(cartCollectionRef);
-      cartSnap.docs.forEach((doc) => batch.delete(doc.ref));
-      await batch.commit();
 
-      // Clear local state cart
-      clearCart();
+
+      const createRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/orders`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(backendPayload)
+      });
       
-      setConfirmedOrder(orderPayload);
-      setCurrentStep(4);
-      addToast('Order placed successfully! 🌿', 'success');
+      const createData = await createRes.json();
+
+      if (createData.success) {
+        clearCart();
+        setConfirmedOrder(orderPayload);
+        setCurrentStep(4);
+        addToast('Order placed successfully! 🌿', 'success');
+      } else {
+        addToast(createData.error || 'Failed to save order on server.', 'error');
+      }
     } catch (e) {
       console.error(e);
       addToast('Failed to save order. Try again.', 'error');
@@ -1087,125 +1069,7 @@ export default function Checkout() {
         )}
       </div>
 
-      {/* Mock Payment Modal */}
-      {showMockPaymentModal && (
-        <div className="modal-backdrop" style={{
-          position: 'fixed', inset: 0, zIndex: 100000,
-          background: 'rgba(0,0,0,0.5)', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', padding: '16px'
-        }}>
-          <div className="modal-box" style={{
-            background: '#fff', borderRadius: '20px', padding: '24px',
-            width: '100%', maxWidth: '420px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
-            position: 'relative', display: 'flex', flexDirection: 'column', gap: '16px',
-            textAlign: 'left'
-          }}>
-            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', color: '#1a5c38', display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'Poppins, sans-serif' }}>
-              <i className="fas fa-shield-alt"></i> Secure Payment Gateway
-            </h3>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#555', background: '#f4f6f0', padding: '12px', borderRadius: '10px' }}>
-              <span>Order Amount:</span>
-              <strong style={{ color: '#1a5c38' }}>₹{grandTotal}</strong>
-            </div>
 
-            {paymentMethod === 'razorpay' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: '600' }}>Enter Card Information:</div>
-                <input 
-                  type="text" 
-                  placeholder="Card Number (16 digits)" 
-                  maxLength="19"
-                  value={mockCardDetails.number}
-                  onChange={(e) => {
-                    let v = e.target.value.replace(/\D/g, '');
-                    v = v.match(/.{1,4}/g)?.join(' ') || v;
-                    setMockCardDetails({ ...mockCardDetails, number: v });
-                  }}
-                  style={{ padding: '10px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-                />
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <input 
-                    type="text" 
-                    placeholder="MM/YY" 
-                    maxLength="5"
-                    value={mockCardDetails.expiry}
-                    onChange={(e) => {
-                      let v = e.target.value.replace(/\D/g, '');
-                      if (v.length > 2) v = v.slice(0,2) + '/' + v.slice(2,4);
-                      setMockCardDetails({ ...mockCardDetails, expiry: v });
-                    }}
-                    style={{ padding: '10px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-                  />
-                  <input 
-                    type="password" 
-                    placeholder="CVV" 
-                    maxLength="3"
-                    value={mockCardDetails.cvv}
-                    onChange={(e) => setMockCardDetails({ ...mockCardDetails, cvv: e.target.value.replace(/\D/g, '') })}
-                    style={{ padding: '10px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-                  />
-                </div>
-                <input 
-                  type="text" 
-                  placeholder="Cardholder Name" 
-                  value={mockCardDetails.name}
-                  onChange={(e) => setMockCardDetails({ ...mockCardDetails, name: e.target.value })}
-                  style={{ padding: '10px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-                />
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: '600' }}>Enter UPI Information:</div>
-                <input 
-                  type="text" 
-                  placeholder="UPI ID (e.g. name@okhdfcbank)" 
-                  value={mockUpiId}
-                  onChange={(e) => setMockUpiId(e.target.value)}
-                  style={{ padding: '10px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', outline: 'none' }}
-                />
-                <div style={{ textAlign: 'center', padding: '10px', background: '#fff9f5', borderRadius: '10px', border: '1px dashed #ffa726', fontSize: '0.78rem', color: '#e65100' }}>
-                  <i className="fas fa-qrcode"></i> Scanning QR Code is also supported on delivery!
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
-              <button 
-                onClick={() => setShowMockPaymentModal(false)}
-                disabled={processingMockPay}
-                style={{
-                  flex: 1, padding: '12px', border: '1.5px solid #cbd5e1',
-                  borderRadius: '10px', background: '#fff', color: '#555',
-                  fontWeight: '600', cursor: 'pointer', fontSize: '0.88rem'
-                }}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleConfirmMockPayment}
-                disabled={processingMockPay}
-                style={{
-                  flex: 1.5, padding: '12px', border: 'none',
-                  borderRadius: '10px', background: 'linear-gradient(135deg, #1a5c38, #2d6a4f)',
-                  color: '#fff', fontWeight: '700', cursor: 'pointer', fontSize: '0.88rem',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-                }}
-              >
-                {processingMockPay ? (
-                  <>
-                    <i className="fas fa-spinner fa-spin"></i> Processing...
-                  </>
-                ) : (
-                  <>
-                    <i className="fas fa-lock"></i> Pay Securely
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div style={{ height: '80px' }}></div>
     </div>

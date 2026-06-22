@@ -15,7 +15,7 @@ if (hasRazorpayCredentials) {
     key_secret: process.env.RAZORPAY_KEY_SECRET,
   });
 } else {
-  console.log('⚠️  Razorpay credentials missing in .env. Running in Backend Dev Mode (mock payments enabled).');
+  console.log('⚠️  Razorpay credentials missing in .env. Payment endpoints will return 500 errors until configured.');
 }
 
 // --------------- POST /api/payments/create ---------------
@@ -54,18 +54,10 @@ const createPaymentOrder = async (req, res, next) => {
       }
     }
 
-    if (!hasRazorpayCredentials) {
-      // Dev mock order creation
-      return res.status(201).json({
-        success: true,
-        data: {
-          orderId: 'order_dev_' + Date.now(),
-          amount: Math.round(amount * 100),
-          currency,
-          receipt: receipt || `order_rcpt_${Date.now()}`,
-          key: 'razorpay_dev_key',
-          _dev_mode: true
-        },
+    if (!hasRazorpayCredentials || !razorpay) {
+      return res.status(500).json({
+        success: false,
+        error: 'Razorpay payment gateway not configured (missing credentials)',
       });
     }
 
@@ -106,18 +98,10 @@ const verifyPayment = async (req, res, next) => {
     }
 
     if (!hasRazorpayCredentials) {
-      // Dev mock signature verification
-      if (razorpay_order_id.startsWith('order_dev_')) {
-        return res.json({
-          success: true,
-          message: 'Payment verified successfully (dev mode mock)',
-          data: {
-            orderId: razorpay_order_id,
-            paymentId: razorpay_payment_id,
-            _dev_mode: true
-          },
-        });
-      }
+      return res.status(500).json({
+        success: false,
+        error: 'Razorpay payment gateway not configured (missing secret)',
+      });
     }
 
     if (!razorpay_signature) {

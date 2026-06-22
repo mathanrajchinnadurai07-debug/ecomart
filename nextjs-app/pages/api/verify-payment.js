@@ -39,15 +39,7 @@ export default async function handler(req, res) {
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
     if (!keySecret) {
-      // Development mode - accept all payments
-      if (razorpay_order_id.startsWith('order_dev_')) {
-        return res.status(200).json({
-          verified: true,
-          orderId: razorpay_order_id,
-          paymentId: razorpay_payment_id,
-          _dev_mode: true
-        });
-      }
+      return res.status(500).json({ error: 'Razorpay payment gateway not configured (missing secret)' });
     }
 
     // Verify signature

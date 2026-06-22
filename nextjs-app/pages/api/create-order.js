@@ -36,24 +36,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid amount' });
     }
 
-    // Initialize Razorpay - will use env vars if available, otherwise return mock for dev
+    // Initialize Razorpay
     const keyId = process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
     if (!keyId || !keySecret) {
-      // Development mode - return mock order for testing
-      return res.status(200).json({
-        id: 'order_dev_' + Date.now(),
-        entity: 'order',
-        amount: Math.round(amount * 100),
-        amount_paid: 0,
-        amount_due: Math.round(amount * 100),
-        currency: currency,
-        receipt: receipt || 'receipt_' + Date.now(),
-        status: 'created',
-        created_at: Math.floor(Date.now() / 1000),
-        _dev_mode: true
-      });
+      return res.status(500).json({ error: 'Razorpay payment gateway not configured (missing credentials)' });
     }
 
     const razorpay = new Razorpay({
