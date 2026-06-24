@@ -35,8 +35,22 @@ export default function Dashboard() {
   // Cancel order modal state
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [orderToCancel, setOrderToCancel] = useState(null);
-  const [cancelReason, setCancelReason] = useState('Changed my mind');
+  const [cancelReason, setCancelReason] = useState('Ordered by mistake');
   const [cancelOtherReason, setCancelOtherReason] = useState('');
+  const [submittingCancel, setSubmittingCancel] = useState(false);
+
+  // Complaint modal state (24h window — food products only)
+  const [complaintModalOpen, setComplaintModalOpen] = useState(false);
+  const [complaintOrder, setComplaintOrder] = useState(null);
+  const [complaintItem, setComplaintItem] = useState(null);
+  const [complaintIssueType, setComplaintIssueType] = useState('wrong_item');
+  const [complaintDescription, setComplaintDescription] = useState('');
+  const [submittingComplaint, setSubmittingComplaint] = useState(false);
+
+  // Coupon state
+  const [couponCode, setCouponCode] = useState('');
+  const [couponResult, setCouponResult] = useState(null);
+  const [couponLoading, setCouponLoading] = useState(false);
 
   // Referral code
   const [referCode, setReferCode] = useState('Curify100');
@@ -178,7 +192,7 @@ export default function Dashboard() {
 
   const handleOpenCancelModal = (orderItem) => {
     setOrderToCancel(orderItem);
-    setCancelReason('Changed my mind');
+    setCancelReason('Ordered by mistake');
     setCancelOtherReason('');
     setCancelModalOpen(true);
   };
@@ -186,73 +200,77 @@ export default function Dashboard() {
   const handleConfirmCancelOrder = async () => {
     if (!orderToCancel) return;
     const finalReason = cancelReason === 'Other' ? (cancelOtherReason || 'Other') : cancelReason;
-
-    try {
-      const timestamp = new Date().toISOString();
-      const cancelEntry = { status: 'cancelled', timestamp };
-
-      // Update global document
-      const globalOrderRef = doc(db, 'orders', orderToCancel.orderId);
-      await updateDoc(globalOrderRef, {
-        status: 'cancelled',
-        statusHistory: arrayUnion(cancelEntry),
-        cancelReason: finalReason
-      });
-
-      // Update user document
-      const userOrderRef = doc(db, 'users', user.uid, 'orders', orderToCancel.orderId);
-      await updateDoc(userOrderRef, {
-        status: 'cancelled',
-        statusHistory: arrayUnion(cancelEntry),
-        cancelReason: finalReason
-      });
-
-      setCancelModalOpen(false);
-      addToast('Order cancelled successfully', 'success');
-      fetchOrders();
-    } catch (e) {
-      console.error(e);
-      addToast('Failed to cancel order', 'error');
-    }
-  };
-
-  const handleOpenReturnModal = (orderItem) => {
-    setOrderToCancel(orderItem);
-    setCancelReason('Damaged Product');
-    setCancelOtherReason('');
-    setCancelModalOpen(true); // Using same modal for simplicity
-  };
-
-  const handleConfirmReturnOrder = async () => {
-    if (!orderToCancel) return;
-    const finalReason = cancelReason === 'Other' ? (cancelOtherReason || 'Other') : cancelReason;
-
+    setSubmittingCancel(true);
     try {
       let token = 'firebase_guest';
-      if (auth.currentUser) {
-        token = await auth.currentUser.getIdToken();
-      }
-
-      // Hit the new backend endpoint
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/orders/${orderToCancel.orderId}/return`, {
+      if (auth.currentUser) token = await auth.currentUser.getIdToken();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/orders/${orderToCancel.orderId}/cancel`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ reason: finalReason })
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to request return');
-      }
-
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to cancel order');
       setCancelModalOpen(false);
-      addToast('Return requested successfully', 'success');
+      addToast('Order cancelled successfully ✓', 'success');
       fetchOrders();
     } catch (e) {
       console.error(e);
-      addToast('Failed to request return', 'error');
+      addToast(e.message || 'Failed to cancel order', 'error');
+    }
+    setSubmittingCancel(false);
+  };
+
+  const handleOpenComplaintModal = (order, item) => {
+    setComplaintOrder(order);
+    setComplaintItem(item);
+    setComplaintIssueType('wrong_item');
+    setComplaintDescription('');
+    setComplaintModalOpen(true);
+  };
+
+  const handleConfirmComplaint = async () => {
+    if (!complaintOrder || !complaintItem) return;
+    setSubmittingComplaint(true);
+    try {
+      let token = 'firebase_guest';
+      if (auth.currentUser) token = await auth.currentUser.getIdToken();
+      const itemId = complaintItem.product_id || complaintItem.id || complaintItem._id;
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/orders/${complaintOrder.orderId}/complaint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ item_id: itemId, issue_type: complaintIssueType, description: complaintDescription })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to raise complaint');
+      setComplaintModalOpen(false);
+      addToast('Complaint raised! We will review it within 24 hours. 🔍', 'success');
+      fetchOrders();
+    } catch (e) {
+      console.error(e);
+      addToast(e.message || 'Failed to raise complaint', 'error');
+    }
+    setSubmittingComplaint(false);
+  };
+
+
+  const handleDownloadInvoice = async (orderId) => {
+    try {
+      let token = 'firebase_guest';
+      if (auth.currentUser) token = await auth.currentUser.getIdToken();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/orders/${orderId}/invoice`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to download invoice');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Invoice_${orderId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      addToast('Could not download invoice', 'error');
     }
   };
 
@@ -601,7 +619,13 @@ export default function Dashboard() {
               {orders.map((o) => {
                 const isCancelled = o.status === 'cancelled';
                 const isDelivered = o.status === 'delivered';
-                const canCancel = !isCancelled && !isDelivered;
+                const isShipped = o.status === 'shipped';
+                // Policy: can cancel only before delivery partner picks up
+                const canCancel = ['pending', 'pending_cod', 'confirmed', 'processing'].includes(o.status);
+                // 24-hour complaint window for food products
+                const deliveredAt = o.deliveredAt ? new Date(o.deliveredAt) : null;
+                const hoursSinceDelivery = deliveredAt ? (Date.now() - deliveredAt.getTime()) / (1000 * 60 * 60) : Infinity;
+                const canComplain = isDelivered && hoursSinceDelivery <= 24;
                 return (
                   <div 
                     key={o.orderId} 
@@ -611,26 +635,64 @@ export default function Dashboard() {
                     <div className="dash-order-head">
                       <span className="dash-order-num">Order #{o.orderId}</span>
                       <span className={`status-badge status-${o.status || 'placed'}`}>
-                        {(o.status === 'return_requested') ? 'RETURN REQUESTED' : (o.status || 'placed')}
+                        {o.status === 'pending_cod' ? 'COD PLACED' : (o.status || 'placed').toUpperCase()}
                       </span>
                     </div>
+
+                    {/* Per-item list with 24h complaint button for delivered orders */}
                     <div className="dash-order-items">
-                      {o.items?.map(i => `${i.name} × ${i.quantity}`).join(', ')}
+                      {o.items?.map((item, idx) => {
+                        const alreadyComplained = item.complaint_raised === true;
+                        return (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px dashed #eee', gap: '8px' }}>
+                            <span style={{ fontSize: '0.82rem', color: '#475569', flex: 1 }}>
+                              {item.name} × {item.quantity}
+                            </span>
+                            {isDelivered && (
+                              canComplain && !alreadyComplained ? (
+                                <button
+                                  onClick={() => handleOpenComplaintModal(o, item)}
+                                  style={{ fontSize: '0.7rem', padding: '3px 10px', borderRadius: '6px', border: '1px solid #e53935', background: 'transparent', color: '#e53935', cursor: 'pointer', fontWeight: '700', whiteSpace: 'nowrap', flexShrink: 0 }}
+                                >
+                                  ⚠ Report Issue
+                                </button>
+                              ) : alreadyComplained ? (
+                                <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '700', whiteSpace: 'nowrap' }}>✓ Reported</span>
+                              ) : (
+                                <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontStyle: 'italic', whiteSpace: 'nowrap' }}>Window closed</span>
+                              )
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
+
+                    {isDelivered && !canComplain && (
+                      <div style={{ fontSize: '0.71rem', color: '#94a3b8', marginTop: '4px', fontStyle: 'italic' }}>
+                        The 24-hour complaint window has closed. Contact <a href="/support" style={{ color: '#1a5c38' }}>support</a> for urgent issues.
+                      </div>
+                    )}
+
+                    {isShipped && (
+                      <div style={{ fontSize: '0.71rem', color: '#f59e0b', marginTop: '4px', fontWeight: '600' }}>
+                        🚚 Order is with the delivery partner — cancellation not available.
+                      </div>
+                    )}
+
                     <div className="dash-order-foot">
                       <span className="dash-order-total">Total Paid: ₹{o.total}</span>
                       <div className="dash-order-actions">
                         <Link href={`/order-tracking?orderId=${o.orderId}`} className="btn-track">
                           <i className="fas fa-map-marker-alt"></i> Track
                         </Link>
+                        {(isDelivered || isCancelled) && (
+                          <button onClick={() => handleDownloadInvoice(o.orderId)} className="btn-track" style={{ background: '#f0faf5', borderColor: '#1a5c38', color: '#1a5c38' }}>
+                            <i className="fas fa-file-pdf"></i> Invoice
+                          </button>
+                        )}
                         {canCancel && (
                           <button onClick={() => handleOpenCancelModal(o)} className="btn-cancel">
                             Cancel
-                          </button>
-                        )}
-                        {isDelivered && (
-                          <button onClick={() => handleOpenReturnModal(o)} className="btn-cancel" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>
-                            Return
                           </button>
                         )}
                       </div>
@@ -1094,23 +1156,21 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* Cancellation/Return Modal */}
+      {/* Cancellation Modal */}
       {cancelModalOpen && orderToCancel && (
         <div className="modal-backdrop">
           <div className="modal-box">
-            <h3 style={{ margin: '0 0 6px', fontSize: '1.1rem', color: orderToCancel.status === 'delivered' ? '#f59e0b' : '#1a5c38', fontWeight: '800', fontFamily: 'Poppins, sans-serif' }}>
-              {orderToCancel.status === 'delivered' ? 'Return Order' : 'Cancel Order'}
+            <h3 style={{ margin: '0 0 6px', fontSize: '1.1rem', color: '#e53935', fontWeight: '800', fontFamily: 'Poppins, sans-serif' }}>
+              Cancel Order
             </h3>
-            <p style={{ margin: '0 0 16px', fontSize: '0.8rem', color: '#888', fontWeight: '500' }}>Order ID: #{orderToCancel.orderId}</p>
-            <p style={{ fontSize: '0.88rem', fontWeight: '700', marginBottom: '12px', color: '#333' }}>
-              {orderToCancel.status === 'delivered' ? 'Why do you want to return this?' : 'Why do you want to cancel?'}
+            <p style={{ margin: '0 0 4px', fontSize: '0.8rem', color: '#888', fontWeight: '500' }}>Order ID: #{orderToCancel.orderId}</p>
+            <p style={{ margin: '0 0 14px', fontSize: '0.76rem', color: '#64748b', lineHeight: '1.5' }}>
+              You can cancel before our delivery partner picks up your order. Once shipped, cancellation is not possible.
             </p>
+            <p style={{ fontSize: '0.88rem', fontWeight: '700', marginBottom: '12px', color: '#333' }}>Why do you want to cancel?</p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '18px' }}>
-              {(orderToCancel.status === 'delivered' ? 
-                ['Damaged Product', 'Defective Item', 'Wrong Item Received', 'Missing Accessories', 'Other'] : 
-                ['Changed my mind', 'Found better price elsewhere', 'Ordered by mistake', 'Delivery taking too long', 'Other']
-              ).map(reason => (
+              {['Ordered by mistake', 'Duplicate order', 'Found a better price', 'Delivery address issue — contact support', 'Other'].map(reason => (
                 <label key={reason} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.88rem', cursor: 'pointer', fontWeight: '500', color: '#444' }}>
                   <input 
                     type="radio" 
@@ -1118,7 +1178,7 @@ export default function Dashboard() {
                     value={reason} 
                     checked={cancelReason === reason} 
                     onChange={() => setCancelReason(reason)}
-                    style={{ accentColor: '#1a5c38' }}
+                    style={{ accentColor: '#e53935' }}
                   /> {reason}
                 </label>
               ))}
@@ -1142,10 +1202,73 @@ export default function Dashboard() {
                 Keep Order
               </button>
               <button 
-                onClick={orderToCancel.status === 'delivered' ? handleConfirmReturnOrder : handleConfirmCancelOrder} 
-                style={{ padding: '10px 16px', border: 'none', background: orderToCancel.status === 'delivered' ? '#f59e0b' : '#ef4444', color: '#fff', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', boxShadow: orderToCancel.status === 'delivered' ? '0 4px 10px rgba(245,158,11,0.2)' : '0 4px 10px rgba(239,68,68,0.2)' }}
+                onClick={handleConfirmCancelOrder}
+                disabled={submittingCancel}
+                style={{ padding: '10px 16px', border: 'none', background: submittingCancel ? '#94a3b8' : '#ef4444', color: '#fff', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: submittingCancel ? 'not-allowed' : 'pointer', boxShadow: '0 4px 10px rgba(239,68,68,0.2)' }}
               >
-                {orderToCancel.status === 'delivered' ? 'Confirm Return' : 'Confirm Cancel'}
+                {submittingCancel ? <><i className="fas fa-spinner fa-spin"></i> Cancelling...</> : 'Confirm Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Issue Modal (24h food complaint) */}
+      {complaintModalOpen && complaintOrder && complaintItem && (
+        <div className="modal-backdrop">
+          <div className="modal-box">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1rem', color: '#e53935', fontWeight: '800', fontFamily: 'Poppins, sans-serif' }}>Report an Issue</h3>
+                <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#64748b' }}>Order #{complaintOrder.orderId} · {complaintItem.name}</p>
+              </div>
+            </div>
+
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 12px', marginBottom: '14px', fontSize: '0.75rem', color: '#b91c1c', lineHeight: '1.5' }}>
+              <i className="fas fa-info-circle" style={{ marginRight: '6px' }}></i>
+              <strong>Food Complaint Policy:</strong> We only accept complaints for wrong items, damaged or spoiled food within <strong>24 hours of delivery</strong>. No returns are accepted for food products.
+            </div>
+
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>What is the issue?</label>
+              <select
+                value={complaintIssueType}
+                onChange={e => setComplaintIssueType(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontFamily: 'inherit', fontSize: '0.88rem', outline: 'none', background: '#fff', color: '#1e293b' }}
+              >
+                <option value="wrong_item">Wrong Item Delivered</option>
+                <option value="damaged">Damaged Product</option>
+                <option value="spoiled">Spoiled / Bad Quality</option>
+                <option value="missing_item">Missing Item</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '18px' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>Describe the issue <span style={{ fontWeight: '400', color: '#94a3b8' }}>(optional)</span></label>
+              <textarea
+                value={complaintDescription}
+                onChange={e => setComplaintDescription(e.target.value)}
+                placeholder="E.g. The mango was bruised and leaking. The package seal was broken..."
+                rows={3}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontFamily: 'inherit', fontSize: '0.85rem', resize: 'none', outline: 'none', color: '#1e293b' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button
+                onClick={() => setComplaintModalOpen(false)}
+                style={{ padding: '10px 16px', border: 'none', background: '#f1f5f9', color: '#475569', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmComplaint}
+                disabled={submittingComplaint}
+                style={{ padding: '10px 20px', border: 'none', background: submittingComplaint ? '#94a3b8' : 'linear-gradient(135deg, #e53935, #b71c1c)', color: '#fff', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: submittingComplaint ? 'not-allowed' : 'pointer', boxShadow: '0 4px 10px rgba(229,57,53,0.2)' }}
+              >
+                {submittingComplaint ? <><i className="fas fa-spinner fa-spin"></i> Submitting...</> : 'Submit Complaint'}
               </button>
             </div>
           </div>

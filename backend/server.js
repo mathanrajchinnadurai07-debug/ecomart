@@ -25,6 +25,11 @@ app.use(cors({
 }));
 app.use(morgan('dev'));
 app.use(compression());
+// Webhook must be parsed as raw Buffer before express.json
+const paymentRoutes = require('./routes/payments');
+app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/payments', paymentRoutes);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -32,7 +37,6 @@ app.use(express.urlencoded({ extended: true }));
 const productRoutes = require('./routes/products');
 const orderRoutes = require('./routes/orders');
 const userRoutes = require('./routes/users');
-const paymentRoutes = require('./routes/payments');
 const newsletterRoutes = require('./routes/newsletter');
 const reviewRoutes = require('./routes/reviews');
 const sellerRoutes = require('./routes/sellers');
@@ -41,7 +45,7 @@ const deliveryRoutes = require('./routes/delivery');
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/payments', paymentRoutes);
+// /api/payments is already mounted above for the webhook
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/sellers', sellerRoutes);

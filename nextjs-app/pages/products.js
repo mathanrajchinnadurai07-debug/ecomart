@@ -38,14 +38,20 @@ export default function Products() {
   const [mobSortOpen, setMobSortOpen] = useState(false);
   const [mobActiveTab, setMobActiveTab] = useState('category');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
+  const [lastQuery, setLastQuery] = useState(null);
 
   useEffect(() => {
     if (!router.isReady) return;
+    const queryStr = JSON.stringify(router.query);
+    if (lastQuery === queryStr) return;
+    
     const { category, featured, bestseller } = router.query;
     setSelectedCategories(category ? [category] : []);
     setFeaturedOnly(featured === 'true');
     if (bestseller === 'true') setSortBy('rating');
-  }, [router.isReady, router.query]);
+    
+    setLastQuery(queryStr);
+  }, [router.isReady, router.query, lastQuery]);
 
   const handleCategoryChange = (cat) =>
     setSelectedCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);

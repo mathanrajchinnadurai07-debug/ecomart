@@ -207,32 +207,41 @@ export default function Checkout() {
           token = localStorage.getItem('Curify_token') || 'firebase_guest';
         }
 
-        // Create order via our API
-        const response = await fetch(`/api/create-order`, {
+        // Prepare the payload for the backend
+        const backendPayload = {
+          user_id: user ? user.uid : 'guest',
+          items: orderPayload.items,
+          total_amount: orderPayload.total,
+          address: orderPayload.address,
+          status: 'pending' // Order is created as pending
+        };
+
+        // Create the pending order via our API, which also generates the Razorpay order
+        const createRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/orders`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ amount: grandTotal, currency: 'INR', receipt: orderId, items: orderPayload.items })
+          body: JSON.stringify(backendPayload)
         });
 
-        const razorpayOrder = await response.json();
+        const createData = await createRes.json();
 
-        if (!response.ok) {
-          throw new Error(razorpayOrder.error || 'Failed to create payment order');
+        if (!createRes.ok || !createData.success) {
+          throw new Error(createData.error || 'Failed to create payment order');
         }
 
-
+        const razorpayOrder = createData; // Contains data, razorpay_order_id, amount, key
 
         // Open Razorpay checkout modal
         const options = {
           key: razorpayOrder.key || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
           amount: razorpayOrder.amount,
-          currency: razorpayOrder.currency,
+          currency: 'INR',
           name: 'Curify',
           description: `Order ${orderId}`,
-          order_id: razorpayOrder.id,
+          order_id: razorpayOrder.razorpay_order_id,
           prefill: {
             name: `${formData.firstName} ${formData.lastName}`.trim(),
             email: formData.email,
@@ -242,40 +251,34 @@ export default function Checkout() {
           handler: async function (paymentResponse) {
             setIsLoadingPayment(true);
             try {
-              // Prepare the final payload for the backend
-              const backendPayload = {
-                user_id: user ? user.uid : 'guest',
-                items: orderPayload.items,
-                total_amount: orderPayload.total,
-                address: orderPayload.address,
-                status: 'paid',
-                payment_id: paymentResponse.razorpay_payment_id,
-                razorpay_order_id: paymentResponse.razorpay_order_id,
-                razorpay_signature: paymentResponse.razorpay_signature
-              };
-
-              const createRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/orders`, {
-                method: 'POST',
+              // Update order status to confirmed
+              const updateRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/orders/${createData.data.id}/status`, {
+                method: 'PUT',
                 headers: { 
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify(backendPayload)
+                body: JSON.stringify({
+                  status: 'confirmed',
+                  payment_id: paymentResponse.razorpay_payment_id,
+                  razorpay_order_id: paymentResponse.razorpay_order_id,
+                  razorpay_signature: paymentResponse.razorpay_signature
+                })
               });
               
-              const createData = await createRes.json();
+              const updateData = await updateRes.json();
 
-              if (createData.success) {
+              if (updateData.success) {
                 // Clear cart via context
                 clearCart();
                 setConfirmedOrder(orderPayload);
                 setCurrentStep(4);
                 addToast('Payment successful & Order placed! 🎉', 'success');
               } else {
-                addToast(createData.error || 'Failed to process order on server.', 'error');
+                addToast(updateData.error || 'Failed to process order on server.', 'error');
               }
             } catch (err) {
-              console.error('Order creation error:', err);
+              console.error('Order status update error:', err);
               addToast('Order processing error. Contact support.', 'error');
             }
             setIsLoadingPayment(false);

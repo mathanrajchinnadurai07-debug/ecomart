@@ -54,6 +54,12 @@ export default function AdminPanel() {
   const [sellerFormError, setSellerFormError] = useState('');
   const [sellerActionStatus, setSellerActionStatus] = useState('idle');
 
+  /* Complaints state */
+  const [complaints, setComplaints] = useState([]);
+  const [complaintsLoading, setComplaintsLoading] = useState(false);
+  const [complaintActionId, setComplaintActionId] = useState(null);
+  const [customRefundAmount, setCustomRefundAmount] = useState('');
+
   /* form state */
   const [form, setForm]           = useState(EMPTY_FORM);
   const [weights, setWeights]     = useState([{ label:'100g', price:'', discountPrice:'' }]);
@@ -99,6 +105,76 @@ export default function AdminPanel() {
     }
   }, []);
 
+  /* ─── Load complaints ─── */
+  const fetchComplaints = useCallback(async () => {
+    setComplaintsLoading(true);
+    try {
+      let authHeaderValue = 'Bearer dev_admin';
+      if (user) {
+        const idToken = await user.getIdToken();
+        authHeaderValue = `Bearer ${idToken}`;
+      }
+      const r = await fetch(`${API}/api/orders/admin/complaints`, {
+        headers: { 'Authorization': authHeaderValue }
+      });
+      const d = await r.json();
+      setComplaints(d.data || []);
+    } catch (err) {
+      console.error('Failed to fetch complaints:', err);
+    } finally {
+      setComplaintsLoading(false);
+    }
+  }, [user]);
+
+  const handleApproveComplaint = async (complaintId, refundAmount) => {
+    try {
+      let authHeaderValue = 'Bearer dev_admin';
+      if (user) {
+        const idToken = await user.getIdToken();
+        authHeaderValue = `Bearer ${idToken}`;
+      }
+      const r = await fetch(`${API}/api/orders/admin/complaints/${complaintId}/approve`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeaderValue
+        },
+        body: JSON.stringify({ refund_amount: refundAmount })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Failed to approve complaint');
+      alert(d.message || 'Complaint approved successfully');
+      fetchComplaints();
+      setComplaintActionId(null);
+      setCustomRefundAmount('');
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleRejectComplaint = async (complaintId) => {
+    if (!confirm('Are you sure you want to reject this complaint?')) return;
+    try {
+      let authHeaderValue = 'Bearer dev_admin';
+      if (user) {
+        const idToken = await user.getIdToken();
+        authHeaderValue = `Bearer ${idToken}`;
+      }
+      const r = await fetch(`${API}/api/orders/admin/complaints/${complaintId}/reject`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': authHeaderValue
+        }
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Failed to reject complaint');
+      alert('Complaint rejected successfully');
+      fetchComplaints();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   /* ─── Load products ─── */
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -124,6 +200,12 @@ export default function AdminPanel() {
     fetchProducts(); 
     fetchSellers();
   }, [fetchProducts, fetchSellers]);
+
+  useEffect(() => {
+    if (view === 'complaints' && (user || isDevBypass)) {
+      fetchComplaints();
+    }
+  }, [view, user, fetchComplaints]);
 
   const handleSellerField = (e) => {
     const { name, value } = e.target;
@@ -485,6 +567,9 @@ export default function AdminPanel() {
             </button>
             <button className={`sb-link ${view==='sellers'?'active':''}`} onClick={() => setView('sellers')}>
               <span>🏪</span> Sellers
+            </button>
+            <button className={`sb-link ${view==='complaints'?'active':''}`} onClick={() => setView('complaints')}>
+              <span>⚠️</span> Complaints
             </button>
             <button className="sb-link" onClick={() => router.push('/')}>
               <span>🏠</span> View Store
@@ -854,6 +939,180 @@ export default function AdminPanel() {
                   )}
                 </div>
 
+              </div>
+            </>
+          )}
+
+          {/* ── COMPLAINTS VIEW ── */}
+          {view === 'complaints' && (
+            <>
+              <div className="page-hdr">
+                <div>
+                  <h1 className="page-title">⚠️ Customer Complaints</h1>
+                  <p className="page-sub">Review product quality or delivery issues (24-hour food window)</p>
+                </div>
+              </div>
+
+              <div className="sec" style={{ overflowX: 'auto' }}>
+                {complaintsLoading ? (
+                  <div className="loading-wrap">
+                    <div className="spinner" /><span>Loading complaints…</span>
+                  </div>
+                ) : complaints.length === 0 ? (
+                  <p style={{ color: '#8b949e', fontSize: '0.88rem', padding: '20px', textAlign: 'center' }}>No complaints found.</p>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #30363d', textAlign: 'left', color: '#8b949e' }}>
+                        <th style={{ padding: '12px 8px' }}>Complaint ID</th>
+                        <th style={{ padding: '12px 8px' }}>Order ID</th>
+                        <th style={{ padding: '12px 8px' }}>Item ID / Product</th>
+                        <th style={{ padding: '12px 8px' }}>Customer</th>
+                        <th style={{ padding: '12px 8px' }}>Issue Type</th>
+                        <th style={{ padding: '12px 8px' }}>Description</th>
+                        <th style={{ padding: '12px 8px' }}>Payment Method</th>
+                        <th style={{ padding: '12px 8px' }}>Amount</th>
+                        <th style={{ padding: '12px 8px' }}>Status</th>
+                        <th style={{ padding: '12px 8px', textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {complaints.map(c => {
+                        const formattedIssue = {
+                          wrong_item: 'Wrong Item',
+                          damaged: 'Damaged Product',
+                          spoiled: 'Spoiled/Bad Quality',
+                          missing_item: 'Missing Item',
+                          other: 'Other'
+                        }[c.issue_type] || c.issue_type;
+
+                        return (
+                          <tr key={c.id} style={{ borderBottom: '1px solid #21262d' }}>
+                            <td style={{ padding: '12px 8px', fontWeight: 'bold' }}>#{c.id}</td>
+                            <td style={{ padding: '12px 8px' }}>#{c.order_id}</td>
+                            <td style={{ padding: '12px 8px', color: '#58a6ff' }}>{c.item_id}</td>
+                            <td style={{ padding: '12px 8px', fontFamily: 'monospace', fontSize: '0.75rem' }}>{c.user_id}</td>
+                            <td style={{ padding: '12px 8px' }}>
+                              <span style={{
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontSize: '0.75rem',
+                                fontWeight: '600',
+                                backgroundColor: '#21262d',
+                                color: '#e6edf3'
+                              }}>
+                                {formattedIssue}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 8px', maxWidth: '200px', whiteSpace: 'normal', wordBreak: 'break-word' }}>{c.description || '—'}</td>
+                            <td style={{ padding: '12px 8px' }}>
+                              <span style={{
+                                textTransform: 'uppercase',
+                                fontSize: '0.72rem',
+                                fontWeight: 'bold',
+                                color: c.payment_method === 'cod' ? '#f08c00' : '#38bdf8'
+                              }}>
+                                {c.payment_method}
+                              </span>
+                              {c.payment_method === 'cod' && (
+                                <span style={{
+                                  display: 'block',
+                                  fontSize: '0.65rem',
+                                  color: '#8b949e',
+                                  marginTop: '2px'
+                                }}>
+                                  ⚠️ Manual Refund Required
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '12px 8px', fontWeight: 'bold' }}>
+                              ₹{c.total_amount || '—'}
+                            </td>
+                            <td style={{ padding: '12px 8px' }}>
+                              <span style={{
+                                padding: '2px 6px',
+                                borderRadius: '10px',
+                                fontSize: '0.72rem',
+                                fontWeight: 'bold',
+                                backgroundColor: c.status === 'approved' ? '#1a3a21' : c.status === 'rejected' ? '#2d1010' : '#1f242c',
+                                color: c.status === 'approved' ? '#3fb950' : c.status === 'rejected' ? '#f85149' : '#8b949e',
+                                border: `1px solid ${c.status === 'approved' ? '#3fb95033' : c.status === 'rejected' ? '#f8514933' : '#30363d'}`
+                              }}>
+                                {c.status}
+                              </span>
+                              {c.status === 'approved' && c.refund_amount > 0 && (
+                                <span style={{ display: 'block', fontSize: '0.7rem', color: '#8b949e', marginTop: '2px' }}>
+                                  Refunded: ₹{c.refund_amount}
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '12px 8px', textAlign: 'right' }}>
+                              {c.status === 'pending' ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                                  {complaintActionId === c.id ? (
+                                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                      <input
+                                        type="number"
+                                        style={{
+                                          width: '70px',
+                                          padding: '4px 6px',
+                                          fontSize: '0.75rem',
+                                          background: '#0d1117',
+                                          border: '1px solid #30363d',
+                                          color: '#fff',
+                                          borderRadius: '4px'
+                                        }}
+                                        placeholder={`Max ${c.total_amount}`}
+                                        value={customRefundAmount}
+                                        onChange={e => setCustomRefundAmount(e.target.value)}
+                                      />
+                                      <button
+                                        className="btn-primary"
+                                        style={{ padding: '4px 8px', fontSize: '0.75rem', boxShadow: 'none' }}
+                                        onClick={() => handleApproveComplaint(c.id, customRefundAmount || c.total_amount)}
+                                      >
+                                        Refund
+                                      </button>
+                                      <button
+                                        className="btn-ghost"
+                                        style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                                        onClick={() => setComplaintActionId(null)}
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                      <button
+                                        className="btn-primary"
+                                        style={{ padding: '4px 8px', fontSize: '0.75rem', background: '#1a5c38', boxShadow: 'none' }}
+                                        onClick={() => {
+                                          setComplaintActionId(c.id);
+                                          setCustomRefundAmount(c.total_amount || '');
+                                        }}
+                                      >
+                                        Approve Refund
+                                      </button>
+                                      <button
+                                        className="btn-delete"
+                                        style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                                        onClick={() => handleRejectComplaint(c.id)}
+                                      >
+                                        Reject
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ color: '#8b949e', fontSize: '0.8rem' }}>Resolved</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </>
           )}

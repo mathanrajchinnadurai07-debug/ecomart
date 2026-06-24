@@ -42,6 +42,36 @@ const sendOrderConfirmationEmail = async (order) => {
   }
 };
 
+const sendOrderStatusUpdateEmail = async (order) => {
+  try {
+    const address = typeof order.address === 'string' ? JSON.parse(order.address) : (order.address || {});
+    const email = address.email;
+    
+    if (!email) {
+      console.warn(`No email found for order ${order.id}. Skipping status update email.`);
+      return;
+    }
+
+    const data = await resend.emails.send({
+      from: 'Curify Orders <orders@curifyorganic.com>',
+      to: email,
+      subject: `Order Update - #${order.id} is now ${order.status.toUpperCase()}`,
+      html: `
+        <h2>Order Status Update</h2>
+        <p>Hi ${address.name || 'Customer'},</p>
+        <p>Your order <strong>#${order.id}</strong> status has been updated to: <strong>${order.status.toUpperCase()}</strong>.</p>
+        <p>Thank you for shopping with us!</p>
+        <p>- The Curify Team</p>
+      `
+    });
+
+    console.log(`Order status update email sent to ${email}:`, data);
+  } catch (error) {
+    console.error('Error sending order status update email:', error);
+  }
+};
+
 module.exports = {
-  sendOrderConfirmationEmail
+  sendOrderConfirmationEmail,
+  sendOrderStatusUpdateEmail
 };

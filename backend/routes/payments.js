@@ -1,15 +1,7 @@
 const router = require('express').Router();
-const { paymentLimiter } = require('../middleware/rateLimiter');
-const { verifyToken } = require('../middleware/auth');
-const {
-  createPaymentOrder,
-  verifyPayment,
-  paymentWebhook,
-} = require('../controllers/paymentController');
+const { paymentWebhook } = require('../controllers/paymentController');
 
-// Both payment routes require authentication and stricter rate limiting
-router.post('/create', paymentLimiter, verifyToken, createPaymentOrder);
-router.post('/verify', paymentLimiter, verifyToken, verifyPayment);
-router.post('/webhook', paymentLimiter, paymentWebhook);
+// The webhook uses express.raw() in server.js, so this route receives a Buffer in req.body
+router.post('/webhook', paymentWebhook);
 
 module.exports = router;

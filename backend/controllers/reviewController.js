@@ -15,6 +15,20 @@ const addReview = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Rating must be between 1 and 5' });
     }
 
+    // Verify user purchased the item and it was delivered
+    const { rows: orderRows } = await db.query(
+      `SELECT o.id FROM orders o, jsonb_array_elements(o.items) as item 
+       WHERE o.user_id = $1 
+         AND (item->>'productId' = $2::text OR item->>'id' = $2::text)
+         AND o.status = 'delivered'
+       LIMIT 1`,
+      [user_id, product_id]
+    );
+
+    if (orderRows.length === 0) {
+      return res.status(403).json({ success: false, error: 'You can only review products that you have purchased and received.' });
+    }
+
     // Insert or update review (user can only review a product once, UPSERT)
     const { rows } = await db.query(
       `INSERT INTO reviews (product_id, user_id, rating, comment) 
