@@ -15,7 +15,8 @@ const {
   approveComplaint,
   rejectComplaint,
   validateCoupon,
-  downloadInvoice
+  downloadInvoice,
+  stuckComplaints
 } = require('../controllers/orderController');
 
 // All order routes require authentication
@@ -26,6 +27,7 @@ router.post('/validate-coupon', apiLimiter, verifyToken, validateCoupon);
 router.get('/admin/complaints', apiLimiter, verifyToken, requireAdmin, listComplaints);
 router.put('/admin/complaints/:id/approve', apiLimiter, verifyToken, requireAdmin, approveComplaint);
 router.put('/admin/complaints/:id/reject', apiLimiter, verifyToken, requireAdmin, rejectComplaint);
+router.get('/admin/complaints/stuck', apiLimiter, verifyToken, requireAdmin, stuckComplaints);
 
 router.get('/user/:userId', apiLimiter, verifyToken, getOrdersByUser);
 router.get('/:id', apiLimiter, verifyToken, getOrderById);

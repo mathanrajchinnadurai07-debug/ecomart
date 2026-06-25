@@ -465,7 +465,16 @@ const shiprocketWebhook = async (req, res, next) => {
       return res.status(401).send('Missing webhook signature');
     }
 
-    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body));
+    console.log('shiprocket webhook: Buffer.isBuffer(req.body) =', Buffer.isBuffer(req.body));
+    if (!Buffer.isBuffer(req.body)) {
+      // If req.body is not a Buffer, express.raw() did not fire for this route.
+      // Re-stringifying a parsed object produces a different byte sequence than
+      // the original payload, so HMAC verification will always fail.  Surface the
+      // misconfiguration instead of masking it with a silent fallback.
+      console.error('🚨 req.body is NOT a Buffer — express.raw() is not mounted before express.json() for this route.');
+      return res.status(500).send('Webhook body parser misconfiguration');
+    }
+    const rawBody = req.body;
     const expectedSignature = require('crypto')
       .createHmac('sha256', webhookSecret)
       .update(rawBody)
@@ -974,6 +983,45 @@ const downloadInvoice = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// --------------- GET /api/orders/admin/complaints/stuck ---------------
+// Reconciliation endpoint: surfaces complaints that were atomically flipped
+// to 'approved' but whose Razorpay refund call may have never completed
+// (process crash, network timeout, etc.).
+// "Stuck" = status='approved' AND created_at is older than N minutes AND
+// the complaint has a non-zero refund_amount but we have no refund record.
+const stuckComplaints = async (req, res, next) => {
+  try {
+    const minutesThreshold = parseInt(req.query.minutes) || 10;
+
+    const { rows } = await db.query(
+      `SELECT c.id AS complaint_id,
+              c.order_id,
+              c.item_id,
+              c.user_id,
+              c.issue_type,
+              c.refund_amount,
+              c.status,
+              c.created_at,
+              o.payment_id,
+              o.payment_method,
+              o.total_amount
+       FROM complaints c
+       JOIN orders o ON o.id = c.order_id
+       WHERE c.status = 'approved'
+         AND c.created_at < NOW() - ($1 || ' minutes')::INTERVAL
+       ORDER BY c.created_at ASC`,
+      [minutesThreshold]
+    );
+
+    res.json({
+      success: true,
+      threshold_minutes: minutesThreshold,
+      count: rows.length,
+      data: rows
+    });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   updateOrderToConfirmed,
   createOrder,
@@ -989,5 +1037,6 @@ module.exports = {
   approveComplaint,
   rejectComplaint,
   validateCoupon,
-  downloadInvoice
+  downloadInvoice,
+  stuckComplaints
 };
