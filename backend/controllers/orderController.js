@@ -8,6 +8,78 @@ const { sendOrderConfirmationEmail, sendOrderStatusUpdateEmail } = require('../u
 const { createDeliveryJobs, sendDeliveryNotifications } = require('../services/deliveryService');
 const { generateInvoicePDF } = require('../utils/invoice');
 
+// --------------- HELPER: SYNC ORDER TO FIRESTORE ---------------
+const syncOrderToFirestore = async (orderId) => {
+  try {
+    const { rows: orderRows } = await db.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+    if (!orderRows.length) return;
+    const order = orderRows[0];
+
+    const { rows: subOrderRows } = await db.query(
+      `SELECT so.*, s.name as seller_name 
+       FROM sub_orders so 
+       LEFT JOIN sellers s ON so.seller_id = s.id 
+       WHERE so.order_id = $1`,
+      [orderId]
+    );
+
+    const items = typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []);
+    const address = typeof order.address === 'string' ? JSON.parse(order.address) : (order.address || {});
+
+    const subOrdersFormatted = subOrderRows.map(so => ({
+      id: so.id,
+      order_id: so.order_id,
+      seller_id: so.seller_id,
+      seller_name: so.seller_name || 'Farmer / Seller',
+      status: so.status || 'pending',
+      shiprocket_order_id: so.shiprocket_order_id,
+      shipment_id: so.shipment_id,
+      created_at: so.created_at,
+      order_items: typeof so.order_items === 'string' ? JSON.parse(so.order_items) : (so.order_items || [])
+    }));
+
+    const firestorePayload = {
+      ...order,
+      items,
+      address,
+      sub_orders: subOrdersFormatted,
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    const orderDocRef = admin.firestore().collection('orders').doc(orderId.toString());
+    const snap = await orderDocRef.get();
+    let statusHistory = [];
+    if (snap.exists() && snap.data().statusHistory) {
+      statusHistory = snap.data().statusHistory;
+    }
+    const lastHistory = statusHistory[statusHistory.length - 1];
+    if (!lastHistory || lastHistory.status !== order.status) {
+      statusHistory.push({ status: order.status, timestamp: new Date().toISOString() });
+    }
+    firestorePayload.statusHistory = statusHistory;
+
+    await orderDocRef.set(firestorePayload, { merge: true });
+
+    await admin.firestore()
+      .collection('users')
+      .doc(order.user_id)
+      .collection('orders')
+      .doc(orderId.toString())
+      .set({
+        orderId: orderId.toString(),
+        total: order.total_amount,
+        items,
+        status: order.status,
+        statusHistory,
+        sub_orders: subOrdersFormatted,
+        createdAt: order.created_at || new Date().toISOString()
+      }, { merge: true });
+
+  } catch (err) {
+    console.error(`Error syncing order ${orderId} to Firestore:`, err);
+  }
+};
+
 // --------------- HELPER: POST PAYMENT SUCCESS ---------------
 const updateOrderToConfirmed = async (orderId, paymentId) => {
   const client = await db.getClient();
@@ -105,24 +177,15 @@ const updateOrderToConfirmed = async (orderId, paymentId) => {
     deleteCachePattern('products:*').catch(console.error);
 
     // Sync Firestore
-    try {
-      const historyEntry = { status: 'confirmed', timestamp: new Date().toISOString() };
-      const fsUpdate = {
-        status: 'confirmed',
-        payment_id: paymentId,
-        updated_at: admin.firestore.FieldValue.serverTimestamp(),
-        statusHistory: admin.firestore.FieldValue.arrayUnion(historyEntry)
-      };
-      await admin.firestore().collection('orders').doc(order.id.toString()).update(fsUpdate);
-      await admin.firestore().collection('users').doc(order.user_id).collection('orders').doc(order.id.toString()).update(fsUpdate);
-      
-      if (pointsToAward > 0) {
+    await syncOrderToFirestore(order.id);
+    if (pointsToAward > 0) {
+      try {
         await admin.firestore().collection('users').doc(order.user_id).set({
           eco_points: admin.firestore.FieldValue.increment(pointsToAward)
         }, { merge: true });
+      } catch (fsErr) {
+        console.error('Firestore eco points sync failed:', fsErr);
       }
-    } catch (fsErr) {
-      console.error('Firestore sync failed in helper:', fsErr);
     }
 
     // Send email
@@ -220,24 +283,7 @@ const createOrder = async (req, res, next) => {
       await client.query('COMMIT');
 
       // Sync to Firestore
-      try {
-        const timestamp = admin.firestore.FieldValue.serverTimestamp();
-        await admin.firestore().collection('orders').doc(newOrder.id.toString()).set({
-          ...newOrder,
-          updated_at: timestamp,
-          statusHistory: [{ status: 'pending_cod', timestamp: new Date().toISOString() }]
-        });
-        await admin.firestore().collection('users').doc(user_id).collection('orders').doc(newOrder.id.toString()).set({
-          orderId: newOrder.id.toString(),
-          total: total_amount,
-          items,
-          status: 'pending_cod',
-          createdAt: new Date().toISOString(),
-          statusHistory: [{ status: 'pending_cod', timestamp: new Date().toISOString() }]
-        });
-      } catch (fsErr) {
-        console.error('Error syncing COD order to Firestore:', fsErr);
-      }
+      await syncOrderToFirestore(newOrder.id);
 
       return res.status(201).json({ success: true, order_id: newOrder.id, payment_method: 'cod' });
     }
@@ -265,25 +311,7 @@ const createOrder = async (req, res, next) => {
     await client.query('COMMIT');
 
     // Sync initial pending state to Firestore
-    try {
-      const timestamp = admin.firestore.FieldValue.serverTimestamp();
-      const firestorePayload = {
-        ...newOrder,
-        updated_at: timestamp,
-        statusHistory: [{ status: 'pending', timestamp: new Date().toISOString() }]
-      };
-      await admin.firestore().collection('orders').doc(newOrder.id.toString()).set(firestorePayload);
-      await admin.firestore().collection('users').doc(user_id).collection('orders').doc(newOrder.id.toString()).set({
-        orderId: newOrder.id.toString(),
-        total: total_amount,
-        items: items,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        statusHistory: [{ status: 'pending', timestamp: new Date().toISOString() }]
-      });
-    } catch (fsErr) {
-      console.error('Error syncing to Firestore:', fsErr);
-    }
+    await syncOrderToFirestore(newOrder.id);
 
     res.status(201).json({ 
       success: true, 
@@ -403,20 +431,7 @@ const updateOrderStatus = async (req, res, next) => {
     }
 
     // Sync to Firestore
-    try {
-      const historyEntry = { status: updatedOrder.status, timestamp: new Date().toISOString() };
-      const fsUpdate = {
-        status: updatedOrder.status,
-        updated_at: admin.firestore.FieldValue.serverTimestamp(),
-        statusHistory: admin.firestore.FieldValue.arrayUnion(historyEntry)
-      };
-      if (updatedOrder.payment_id) fsUpdate.payment_id = updatedOrder.payment_id;
-      
-      await admin.firestore().collection('orders').doc(updatedOrder.id.toString()).update(fsUpdate);
-      await admin.firestore().collection('users').doc(updatedOrder.user_id).collection('orders').doc(updatedOrder.id.toString()).update(fsUpdate);
-    } catch (fsErr) {
-      console.error('Error syncing order status update to Firestore:', fsErr);
-    }
+    await syncOrderToFirestore(updatedOrder.id);
 
     // Send Status Update Email
     if (['confirmed', 'shipped', 'delivered'].includes(updatedOrder.status)) {
@@ -476,21 +491,53 @@ const shiprocketWebhook = async (req, res, next) => {
     else if (lowerStatus.includes('processing') || lowerStatus.includes('manifested')) newStatus = 'processing';
 
     if (newStatus) {
-      const { rows } = await db.query('SELECT * FROM orders WHERE shiprocket_order_id = $1 OR id::text = $1 LIMIT 1', [order_id.toString()]);
+      let parentOrderIdStr = order_id.toString();
+      let subOrderIdStr = null;
+      if (parentOrderIdStr.includes('-')) {
+        const parts = parentOrderIdStr.split('-');
+        parentOrderIdStr = parts[0];
+        subOrderIdStr = parts[1];
+      }
+
+      const { rows } = await db.query('SELECT * FROM orders WHERE shiprocket_order_id = $1 OR id::text = $1 LIMIT 1', [parentOrderIdStr]);
       if (rows.length > 0) {
         const order = rows[0];
+
+        // Update the specific sub_order if identified
+        if (subOrderIdStr) {
+          await db.query('UPDATE sub_orders SET status = $1 WHERE id = $2 AND order_id = $3', [newStatus, subOrderIdStr, order.id]);
+        } else {
+          await db.query('UPDATE sub_orders SET status = $1 WHERE shiprocket_order_id = $2 AND order_id = $3', [newStatus, order_id.toString(), order.id]);
+        }
+
+        // Determine overall status of parent order
+        const { rows: allSubOrders } = await db.query('SELECT status FROM sub_orders WHERE order_id = $1', [order.id]);
+        let overallStatus = newStatus;
+        if (allSubOrders.length > 0) {
+          const allDelivered = allSubOrders.every(so => so.status === 'delivered');
+          const anyShipped = allSubOrders.some(so => so.status === 'shipped');
+          const anyProcessing = allSubOrders.some(so => so.status === 'processing');
+          
+          if (allDelivered) {
+            overallStatus = 'delivered';
+          } else if (anyShipped) {
+            overallStatus = 'shipped';
+          } else if (anyProcessing) {
+            overallStatus = 'processing';
+          }
+        }
         
         let updateQuery = 'UPDATE orders SET status = $1';
-        const updateParams = [newStatus];
+        const updateParams = [overallStatus];
         let pCount = 1;
         let whereExtra = '';
 
-        if (newStatus === 'shipped') {
+        if (overallStatus === 'shipped') {
           pCount++;
           updateQuery += `, shipped_at = $${pCount}`;
           updateParams.push(new Date());
           whereExtra = ' AND shipped_at IS NULL';
-        } else if (newStatus === 'delivered') {
+        } else if (overallStatus === 'delivered') {
           pCount++;
           updateQuery += `, delivered_at = $${pCount}`;
           updateParams.push(new Date());
@@ -503,22 +550,12 @@ const shiprocketWebhook = async (req, res, next) => {
 
         const updateRes = await db.query(updateQuery, updateParams);
 
-        // Duplicate webhook event for an order that's already stamped — sync status only,
-        // don't touch the timestamp (this is what protects the 24h complaint window)
         if (whereExtra && updateRes.rowCount === 0) {
-          await db.query('UPDATE orders SET status = $1 WHERE id = $2', [newStatus, order.id]);
+          await db.query('UPDATE orders SET status = $1 WHERE id = $2', [overallStatus, order.id]);
         }
 
-        try {
-          const historyEntry = { status: newStatus, timestamp: new Date().toISOString() };
-          const fsUpdate = {
-            status: newStatus,
-            updated_at: admin.firestore.FieldValue.serverTimestamp(),
-            statusHistory: admin.firestore.FieldValue.arrayUnion(historyEntry)
-          };
-          await admin.firestore().collection('orders').doc(order.id.toString()).update(fsUpdate);
-          await admin.firestore().collection('users').doc(order.user_id).collection('orders').doc(order.id.toString()).update(fsUpdate);
-        } catch (fsErr) { console.error(fsErr); }
+        // Sync everything to Firestore
+        await syncOrderToFirestore(order.id);
       }
     }
 
@@ -580,14 +617,7 @@ const returnOrder = async (req, res, next) => {
     );
 
     // Sync to Firestore
-    try {
-      const fsUpdate = {
-        items: items,
-        updated_at: admin.firestore.FieldValue.serverTimestamp()
-      };
-      await admin.firestore().collection('orders').doc(id.toString()).update(fsUpdate);
-      await admin.firestore().collection('users').doc(userId).collection('orders').doc(id.toString()).update(fsUpdate);
-    } catch (fsErr) { console.error('Firestore sync error for item return:', fsErr); }
+    await syncOrderToFirestore(id);
 
     res.status(201).json({ success: true, data: updatedOrder });
   } catch (err) { next(err); }
@@ -642,17 +672,8 @@ const cancelOrder = async (req, res, next) => {
     await deleteCachePattern('products:*');
 
     // Sync Firestore
-    try {
-      const historyEntry = { status: 'cancelled', timestamp: new Date().toISOString() };
-      const fsUpdate = {
-        status: 'cancelled',
-        cancelReason: reason || 'Customer cancelled',
-        updated_at: admin.firestore.FieldValue.serverTimestamp(),
-        statusHistory: admin.firestore.FieldValue.arrayUnion(historyEntry)
-      };
-      await admin.firestore().collection('orders').doc(id.toString()).update(fsUpdate);
-      await admin.firestore().collection('users').doc(userId).collection('orders').doc(id.toString()).update(fsUpdate);
-    } catch (fsErr) { console.error('Firestore sync error for cancel:', fsErr); }
+    await db.query(`UPDATE sub_orders SET status = 'cancelled' WHERE order_id = $1`, [id]);
+    await syncOrderToFirestore(id);
 
     // Send cancellation email
     try { await sendOrderStatusUpdateEmail(updatedOrder); } catch (e) { console.error('Cancel email failed:', e); }
@@ -679,13 +700,8 @@ const refundOrder = async (req, res, next) => {
     const { rows: updateRows } = await db.query('UPDATE orders SET status = $1 WHERE id = $2 RETURNING *', ['refunded', id]);
 
     try {
-      const historyEntry = { status: 'refunded', timestamp: new Date().toISOString() };
-      const fsUpdate = {
-        status: 'refunded', updated_at: admin.firestore.FieldValue.serverTimestamp(),
-        statusHistory: admin.firestore.FieldValue.arrayUnion(historyEntry)
-      };
-      await admin.firestore().collection('orders').doc(id.toString()).update(fsUpdate);
-      await admin.firestore().collection('users').doc(order.user_id).collection('orders').doc(id.toString()).update(fsUpdate);
+      await db.query(`UPDATE sub_orders SET status = 'refunded' WHERE order_id = $1`, [id]);
+      await syncOrderToFirestore(id);
     } catch (fsErr) { console.error(fsErr); }
 
     res.json({ success: true, message: 'Order refunded successfully', data: updateRows[0] });
@@ -745,10 +761,7 @@ const raiseComplaint = async (req, res, next) => {
     );
 
     // Sync Firestore
-    try {
-      await admin.firestore().collection('orders').doc(id.toString()).update({ items, updated_at: admin.firestore.FieldValue.serverTimestamp() });
-      await admin.firestore().collection('users').doc(userId).collection('orders').doc(id.toString()).update({ items, updated_at: admin.firestore.FieldValue.serverTimestamp() });
-    } catch (fsErr) { console.error('Firestore complaint sync error:', fsErr); }
+    await syncOrderToFirestore(id);
 
     res.status(201).json({ success: true, message: 'Complaint raised. We will review it within 24 hours.' });
   } catch (err) { next(err); }

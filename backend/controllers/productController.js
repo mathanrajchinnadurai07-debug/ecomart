@@ -66,7 +66,11 @@ const formatProductDbToApi = (p) => {
     delivery_info: p.delivery_info,
     returnPolicy: p.return_policy,
     return_policy: p.return_policy,
-    seller_id: p.seller_id
+    seller_id: p.seller_id,
+    seller_name: p.seller_name || 'Curify Central Store',
+    seller_location: p.seller_address 
+      ? (typeof p.seller_address === 'string' ? JSON.parse(p.seller_address).city : p.seller_address.city) || 'Tamil Nadu'
+      : 'Chennai, TN'
   };
 };
 
@@ -86,17 +90,28 @@ const getAllProducts = async (req, res, next) => {
     const sortCol = allowedSorts.includes(sort) ? sort : 'created_at';
     const sortOrder = order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-    let query = 'SELECT * FROM products';
+    let query = 'SELECT p.*, s.name AS seller_name, s.address AS seller_address FROM products p LEFT JOIN sellers s ON p.seller_id = s.id';
     const params = [];
     let paramCount = 0;
+    const conditions = [];
 
     if (category) {
       paramCount++;
-      query += ` WHERE LOWER(category) = $${paramCount}`;
+      conditions.push(`LOWER(p.category) = $${paramCount}`);
       params.push(category.toLowerCase());
     }
 
-    query += ` ORDER BY ${sortCol} ${sortOrder}`;
+    if (req.query.seller_id) {
+      paramCount++;
+      conditions.push(`p.seller_id = $${paramCount}`);
+      params.push(parseInt(req.query.seller_id, 10));
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    query += ` ORDER BY p.${sortCol} ${sortOrder}`;
 
     paramCount++;
     query += ` LIMIT $${paramCount}`;
@@ -110,10 +125,22 @@ const getAllProducts = async (req, res, next) => {
 
     let countQuery = 'SELECT COUNT(*) FROM products';
     const countParams = [];
+    const countConditions = [];
+    
     if (category) {
-      countQuery += ' WHERE LOWER(category) = $1';
+      countConditions.push('LOWER(category) = $1');
       countParams.push(category.toLowerCase());
     }
+    
+    if (req.query.seller_id) {
+      countConditions.push('seller_id = $' + (countParams.length + 1));
+      countParams.push(parseInt(req.query.seller_id, 10));
+    }
+    
+    if (countConditions.length > 0) {
+      countQuery += ' WHERE ' + countConditions.join(' AND ');
+    }
+    
     const countResult = await db.query(countQuery, countParams);
     const total = parseInt(countResult.rows[0].count, 10);
 
@@ -143,9 +170,11 @@ const searchProducts = async (req, res, next) => {
     if (cached) return res.json(cached);
 
     const { rows } = await db.query(
-      `SELECT * FROM products
-       WHERE LOWER(name) LIKE $1 OR LOWER(description) LIKE $1 OR LOWER(category) LIKE $1
-       ORDER BY rating DESC LIMIT 50`,
+      `SELECT p.*, s.name AS seller_name, s.address AS seller_address 
+       FROM products p 
+       LEFT JOIN sellers s ON p.seller_id = s.id
+       WHERE LOWER(p.name) LIKE $1 OR LOWER(p.description) LIKE $1 OR LOWER(p.category) LIKE $1
+       ORDER BY p.rating DESC LIMIT 50`,
       [`%${q.toLowerCase()}%`]
     );
 
@@ -169,7 +198,11 @@ const getProductsByCategory = async (req, res, next) => {
     if (cached) return res.json(cached);
 
     const { rows } = await db.query(
-      'SELECT * FROM products WHERE LOWER(category) = $1 ORDER BY created_at DESC',
+      `SELECT p.*, s.name AS seller_name, s.address AS seller_address 
+       FROM products p 
+       LEFT JOIN sellers s ON p.seller_id = s.id 
+       WHERE LOWER(p.category) = $1 
+       ORDER BY p.created_at DESC`,
       [cat.toLowerCase()]
     );
 
@@ -192,7 +225,13 @@ const getProductById = async (req, res, next) => {
     const cached = await getCache(cacheKey);
     if (cached) return res.json(cached);
 
-    const { rows } = await db.query('SELECT * FROM products WHERE id = $1', [id]);
+    const { rows } = await db.query(
+      `SELECT p.*, s.name AS seller_name, s.address AS seller_address 
+       FROM products p 
+       LEFT JOIN sellers s ON p.seller_id = s.id 
+       WHERE p.id = $1`,
+      [id]
+    );
     if (!rows.length) {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
@@ -222,7 +261,13 @@ const getProductBySlug = async (req, res, next) => {
     const cached = await getCache(cacheKey);
     if (cached) return res.json(cached);
 
-    const { rows } = await db.query('SELECT * FROM products WHERE slug = $1', [slug]);
+    const { rows } = await db.query(
+      `SELECT p.*, s.name AS seller_name, s.address AS seller_address 
+       FROM products p 
+       LEFT JOIN sellers s ON p.seller_id = s.id 
+       WHERE p.slug = $1`,
+      [slug]
+    );
     if (!rows.length) {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }

@@ -243,7 +243,10 @@ export const CartProvider = ({ children }) => {
               imageUrl: item.image || '',
               unit: item.weight || '',
               category: item.category || '',
-              quantity: item.quantity
+              quantity: item.quantity,
+              seller_id: item.seller_id || 2,
+              seller_name: item.seller_name || 'Curify Central Store',
+              seller_location: item.seller_location || 'Tamil Nadu'
             }, { merge: true });
           }
           await batch.commit();
@@ -297,7 +300,10 @@ export const CartProvider = ({ children }) => {
         productId: d.id,
         ...d.data(),
         image: d.data().imageUrl || d.data().image || '',
-        weight: d.data().unit || '250g'
+        weight: d.data().unit || '250g',
+        seller_id: d.data().seller_id || 2,
+        seller_name: d.data().seller_name || 'Curify Central Store',
+        seller_location: d.data().seller_location || 'Tamil Nadu'
       }));
       setCart(items);
     }, (error) => {
@@ -382,7 +388,10 @@ export const CartProvider = ({ children }) => {
             imageUrl: imgUrl,
             unit: weight,
             category: product.category || '',
-            quantity: quantity
+            quantity: quantity,
+            seller_id: product.seller_id || 2,
+            seller_name: product.seller_name || 'Curify Central Store',
+            seller_location: product.seller_location || 'Tamil Nadu'
           });
         }
         addToast(`${product.name} added to cart! 🛒`, 'success');
@@ -404,7 +413,10 @@ export const CartProvider = ({ children }) => {
           originalPrice: origPrice,
           image: imgUrl,
           weight: weight,
-          quantity: quantity
+          quantity: quantity,
+          seller_id: product.seller_id || 2,
+          seller_name: product.seller_name || 'Curify Central Store',
+          seller_location: product.seller_location || 'Tamil Nadu'
         });
       }
       setCart(updated);

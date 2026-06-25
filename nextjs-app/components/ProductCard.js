@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useCart } from '../context/CartContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function ProductCard({ product }) {
   const { addToCart, toggleWishlist, isInWishlist } = useCart();
+  const { language, t } = useLanguage();
   
   // Set default weight if available
   const initialWeight = product.weights && product.weights.length > 0 
@@ -31,8 +33,22 @@ export default function ProductCard({ product }) {
 
   const stockVal = product.stock !== undefined ? product.stock : 100;
   const outOfStock = stockVal <= 0;
-  const stockLabel = stockVal > 20 ? 'In Stock' : stockVal > 0 ? `Only ${stockVal} left` : 'Out of Stock';
+  
+  const stockLabel = stockVal > 20 
+    ? t('in_stock') 
+    : stockVal > 0 
+      ? t('low_stock', { count: stockVal }) 
+      : t('out_of_stock');
+
   const stockClass = stockVal > 20 ? 'in-stock' : stockVal > 0 ? 'low-stock' : 'out-of-stock';
+
+  const organicCategories = ['vegetables', 'fruits', 'mushroom', 'grocery', 'flour', 'spreads', 'superfoods', 'beverages', 'readytocook'];
+  const isOrganic = organicCategories.includes(product.category);
+
+  const formattedDate = new Date(new Date().getTime() - 24*60*60*1000).toLocaleDateString(language === 'en' ? 'en-US' : 'ta-IN', {
+    month: 'short',
+    day: 'numeric'
+  });
 
   const categoryEmojis = {
     vegetables: '🥬',
@@ -77,21 +93,23 @@ export default function ProductCard({ product }) {
   };
 
   return (
-    <div className={`product-card ${outOfStock ? 'out-of-stock-card' : ''}`}>
+    <div className={`product-card ${outOfStock ? 'out-of-stock-card' : ''}`} style={{ border: '1px solid var(--border)', background: '#fff', boxShadow: 'none' }}>
       <div className="product-badges">
         {discount > 0 && <span className="badge badge-sale">{discount}% OFF</span>}
       </div>
       <button 
-        className={`wishlist-btn ${isWishlisted ? 'active' : ''}`} 
+        className={`wishlist-btn focus-visible-ring ${isWishlisted ? 'active' : ''}`} 
         onClick={handleWishlistClick}
+        aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
       >
         <i className={`${isWishlisted ? 'fas' : 'far'} fa-heart`}></i>
       </button>
-      <Link href={`/product/${product.slug}`} className="product-image">
+      <Link href={`/product/${product.slug}`} className="product-image focus-visible-ring" aria-label={`View details of ${product.name}`}>
         {imgSrc ? (
           <img 
             src={imgSrc} 
             alt={product.name} 
+            loading="lazy"
             style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0' }} 
           />
         ) : (
@@ -101,16 +119,32 @@ export default function ProductCard({ product }) {
         )}
       </Link>
       <div className="product-info">
-        <div className="product-category">{product.category || ''}</div>
-        <h3 className="product-name">
-          <Link href={`/product/${product.slug}`}>{product.name}</Link>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px', marginBottom: '4px' }}>
+          <span className="product-category" style={{ margin: 0 }}>{product.category || ''}</span>
+          {isOrganic && (
+            <span className="badge-cert" style={{ fontSize: '0.6rem', padding: '2px 6px' }}>PGS-India</span>
+          )}
+        </div>
+        <h3 className="product-name" style={{ fontFamily: 'var(--font-heading)', fontSize: '0.95rem', fontWeight: '700', marginBottom: '2px' }}>
+          <Link href={`/product/${product.slug}`} className="focus-visible-ring">{product.name}</Link>
         </h3>
-        <div className="product-price">
-          <span className="price-current">₹{showPrice}</span>
+        
+        {/* Seller transparency label */}
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-light)', marginBottom: '6px' }}>
+          {t('by')}: <span style={{ fontWeight: '600', color: 'var(--primary)' }}>{product.seller_name || 'Curify Central Store'}</span>
+        </div>
+
+        {/* Harvest Stamp Signature Motif */}
+        <div className="harvest-stamp" style={{ margin: '6px 0', width: '100%', display: 'flex', justifyContent: 'center' }}>
+          <span>🌾 {t('harvest_stamp')}: {formattedDate} ({product.seller_location})</span>
+        </div>
+
+        <div className="product-price" style={{ margin: '8px 0 4px 0' }}>
+          <span className="price-current" style={{ fontFamily: 'var(--font)', fontWeight: '800' }}>₹{showPrice}</span>
           {discount > 0 && (
             <>
-              <span className="price-original">₹{showOriginal}</span>
-              <span className="price-discount">{discount}% off</span>
+              <span className="price-original" style={{ textDecoration: 'line-through', color: 'var(--text-light)', marginLeft: '6px', fontSize: '0.8rem' }}>₹{showOriginal}</span>
+              <span className="price-discount" style={{ color: 'var(--accent)', marginLeft: '6px', fontSize: '0.8rem', fontWeight: '700' }}>{discount}% off</span>
             </>
           )}
         </div>
@@ -143,19 +177,20 @@ export default function ProductCard({ product }) {
         )}
 
         {product.unit && !product.weights && (
-          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>{product.unit}</div>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', height: '26px' }}>{product.unit}</div>
         )}
 
-        <div className={`product-stock ${stockClass}`}>
+        <div className={`product-stock ${stockClass}`} style={{ margin: '4px 0 8px 0' }}>
           <i className="fas fa-circle" style={{ fontSize: '0.5rem', marginRight: '4px' }}></i> {stockLabel}
         </div>
         <button 
-          className="add-to-cart-btn" 
+          className="add-to-cart-btn cta-btn-accent focus-visible-ring" 
           disabled={outOfStock}
           style={outOfStock ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
           onClick={handleAddClick}
+          aria-label={outOfStock ? `${product.name} is Out of stock` : `Add ${product.name} (${selectedWeight}) to cart`}
         >
-          <i className={`fas fa-${outOfStock ? 'ban' : 'cart-plus'}`}></i> {outOfStock ? 'Out of Stock' : 'Add to Cart'}
+          <i className={`fas fa-${outOfStock ? 'ban' : 'cart-plus'}`}></i> {outOfStock ? t('out_of_stock') : t('add_to_cart')}
         </button>
       </div>
     </div>

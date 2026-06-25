@@ -2,11 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useCart } from '../context/CartContext';
+import { useLanguage } from '../context/LanguageContext';
 import { ALL_PRODUCTS } from '../data/products';
 
 export default function Layout({ children }) {
   const router = useRouter();
   const { user, userProfile, cart, wishlist, logout, addToast } = useCart();
+  const { language, changeLanguage, t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchCategory, setSearchCategory] = useState('');
   const [userLocation, setUserLocation] = useState('Detect Location');
@@ -186,16 +188,42 @@ export default function Layout({ children }) {
 
   return (
     <>
+      {/* Live Harvest Marquee (with hover pause and reduced-motion support) */}
+      <div className="live-harvest-marquee" aria-label="Live updates of today's harvest from our farmers">
+        <div className="live-harvest-track">
+          <span>{t('todays_harvest_msg')}</span>
+          <span>{t('todays_harvest_msg')}</span>
+        </div>
+      </div>
+
       {/* HEADER */}
       {router.pathname === '/' && (
-        <header className="m-header" id="mHeader">
+        <header className="m-header" id="mHeader" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="m-header-top">
-            <Link href="/" className="m-logo">
+            <Link href="/" className="m-logo logo-stamp-wrap">
               <div className="m-logo-icon"><span>🌿</span></div>
-              <div className="m-logo-text"><span>Curify</span><span>Organic</span></div>
+              <div className="m-logo-text"><span>Curify</span><span style={{ color: 'var(--accent)', fontWeight: '700' }}>PGS</span></div>
             </Link>
-            <div className="m-header-actions">
-              <Link href="/dashboard?tab=wishlist" className="m-header-btn">
+            <div className="m-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <button 
+                onClick={() => changeLanguage(language === 'en' ? 'ta' : 'en')}
+                className="focus-visible-ring"
+                aria-label="Toggle language between English and Tamil"
+                style={{
+                  background: 'rgba(26, 92, 56, 0.08)',
+                  border: '1px solid rgba(26, 92, 56, 0.15)',
+                  color: 'var(--primary)',
+                  borderRadius: '12px',
+                  padding: '4px 10px',
+                  fontSize: '0.75rem',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  fontFamily: 'Poppins, sans-serif'
+                }}
+              >
+                {language === 'en' ? 'தமிழ்' : 'English'}
+              </button>
+              <Link href="/dashboard?tab=wishlist" className="m-header-btn focus-visible-ring" aria-label="View Wishlist">
                 <i className="fas fa-heart"></i>
                 {wishlist.length > 0 && (
                   <span className="m-bnav-badge" style={{ display: 'flex', top: '-4px', right: '-4px' }}>
@@ -208,9 +236,10 @@ export default function Layout({ children }) {
 
           <form onSubmit={handleSearch} className="m-search-wrap">
             <select 
-              className="m-search-dept" 
+              className="m-search-dept focus-visible-ring" 
               value={searchCategory}
               onChange={(e) => setSearchCategory(e.target.value)}
+              aria-label="Filter search by category"
             >
               <option value="">All</option>
               <option value="biscuits">Biscuits</option>
@@ -230,13 +259,13 @@ export default function Layout({ children }) {
               <option value="vegetables">Vegetables</option>
               <option value="fruits">Fruits</option>
             </select>
-            <button type="submit" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            <button type="submit" aria-label="Submit Search" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               <i className="fas fa-search m-search-icon"></i>
             </button>
             <input 
               type="text" 
-              placeholder="Search 50+ organic products..." 
-              className="m-search-input"
+              placeholder={t('search_placeholder')} 
+              className="m-search-input focus-visible-ring"
               value={searchQuery}
               readOnly
               onClick={() => router.push('/search')}
@@ -244,13 +273,15 @@ export default function Layout({ children }) {
             />
           </form>
 
-          <div className="m-location-bar">
-            <i className="fas fa-map-marker-alt"></i>
-            <span onClick={handleDetectLocation} style={{ cursor: 'pointer' }}>
-              Deliver to <strong>{userLocation}</strong>
-            </span>
-            <i className="fas fa-chevron-down" style={{ fontSize: '0.6rem', marginLeft: '2px' }}></i>
-            <Link href="/products?bestseller=true" className="m-prime-btn">🔥 Today's Deals</Link>
+          <div className="m-location-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <i className="fas fa-map-marker-alt" style={{ marginRight: '6px' }}></i>
+              <span onClick={handleDetectLocation} style={{ cursor: 'pointer', fontSize: '0.78rem' }}>
+                {t('deliver_to')} <strong>{userLocation}</strong>
+              </span>
+              <i className="fas fa-chevron-down" style={{ fontSize: '0.6rem', marginLeft: '4px' }}></i>
+            </div>
+            <Link href="/products?bestseller=true" className="m-prime-btn focus-visible-ring" style={{ fontSize: '0.75rem', fontWeight: '700' }}>🔥 {t('todays_deals')}</Link>
           </div>
         </header>
       )}
@@ -316,26 +347,26 @@ export default function Layout({ children }) {
 
       {/* BOTTOM NAV */}
       <nav className="m-bottom-nav">
-        <Link href="/" className={`m-bnav-item ${router.pathname === '/' ? 'active' : ''}`}>
-          <i className="fas fa-home"></i><span>Home</span>
+        <Link href="/" className={`m-bnav-item focus-visible-ring ${router.pathname === '/' ? 'active' : ''}`}>
+          <i className="fas fa-home"></i><span>{t('home')}</span>
         </Link>
-        <Link href="/categories" className={`m-bnav-item ${router.pathname === '/categories' ? 'active' : ''}`}>
-          <i className="fas fa-th-large"></i><span>Categories</span>
+        <Link href="/categories" className={`m-bnav-item focus-visible-ring ${router.pathname === '/categories' ? 'active' : ''}`}>
+          <i className="fas fa-th-large"></i><span>{t('categories')}</span>
         </Link>
-        <Link href="/cart" className={`m-bnav-item ${router.pathname === '/cart' ? 'active' : ''}`}>
+        <Link href="/cart" className={`m-bnav-item focus-visible-ring ${router.pathname === '/cart' ? 'active' : ''}`}>
           <div className="m-bnav-cart-icon">
             <i className="fas fa-shopping-cart"></i>
             {totalCartItems > 0 && (
               <span className="m-bnav-badge" id="cartCount">{totalCartItems}</span>
             )}
           </div>
-          <span>Cart</span>
+          <span>{t('cart')}</span>
         </Link>
-        <Link href="/dashboard" className={`m-bnav-item ${router.pathname === '/dashboard' ? 'active' : ''}`}>
-          <i className="fas fa-user"></i><span>Account</span>
+        <Link href="/dashboard" className={`m-bnav-item focus-visible-ring ${router.pathname === '/dashboard' ? 'active' : ''}`}>
+          <i className="fas fa-user"></i><span>{t('account')}</span>
         </Link>
-        <Link href="/support" className={`m-bnav-item ${router.pathname === '/support' ? 'active' : ''}`}>
-          <i className="fas fa-headset"></i><span>Support</span>
+        <Link href="/support" className={`m-bnav-item focus-visible-ring ${router.pathname === '/support' ? 'active' : ''}`}>
+          <i className="fas fa-headset"></i><span>{t('support')}</span>
         </Link>
       </nav>
 
