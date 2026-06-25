@@ -9,7 +9,11 @@ const paymentWebhook = async (req, res, next) => {
   try {
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
     if (!webhookSecret) {
-      return res.status(200).send('Webhook secret not configured, ignoring');
+      // 500 — NOT 200. A 200 silently accepts all unauthenticated events and hides
+      // the misconfiguration. Razorpay will retry on 5xx, making the failure visible
+      // in the Razorpay dashboard and in server logs.
+      console.error('🚨 CRITICAL: RAZORPAY_WEBHOOK_SECRET is not set. Rejecting webhook.');
+      return res.status(500).send('Webhook secret not configured');
     }
 
     const signature = req.headers['x-razorpay-signature'];

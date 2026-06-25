@@ -8,6 +8,7 @@ export default function Home() {
   const { addToast } = useCart();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [newsletterEmail, setNewsletterEmail] = useState('');
+  const [products, setProducts] = useState(ALL_PRODUCTS);
 
   const slides = [
     {
@@ -68,6 +69,24 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
+  // Fetch products from database on mount
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/products?limit=1000`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.data) {
+            setProducts(data.data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch products from backend:', err);
+      }
+    };
+    fetchProducts();
+  }, []);
+
   const handleNewsletterSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -89,9 +108,9 @@ export default function Home() {
   };
 
   // Filter products for homepage sections
-  const featuredProducts = ALL_PRODUCTS.filter(p => p.isFeatured).slice(0, 8);
+  const featuredProducts = products.filter(p => p.isFeatured).slice(0, 8);
   // Deals Products: Bestsellers or high rating
-  const dealsProducts = ALL_PRODUCTS.filter(p => p.rating >= 4.6).slice(0, 8);
+  const dealsProducts = products.filter(p => p.rating >= 4.6).slice(0, 8);
 
   const categories = [
     { key: 'biscuits', name: 'Biscuits & Cookies', sub: 'Ragi, millet, jaggery, oats, coconut cookies in kraft packaging' },
@@ -226,7 +245,7 @@ export default function Home() {
 
       {/* Category Scrolls */}
       {categories.slice(0, 5).map((cat, idx) => {
-        const catProducts = ALL_PRODUCTS.filter(p => p.category === cat.key).slice(0, 8);
+        const catProducts = products.filter(p => p.category === cat.key).slice(0, 8);
         if (catProducts.length === 0) return null;
         const isTinted = idx % 2 === 0;
         return (
@@ -261,7 +280,7 @@ export default function Home() {
 
       {/* Remaining Category Scrolls */}
       {categories.slice(5).map((cat, idx) => {
-        const catProducts = ALL_PRODUCTS.filter(p => p.category === cat.key).slice(0, 8);
+        const catProducts = products.filter(p => p.category === cat.key).slice(0, 8);
         if (catProducts.length === 0) return null;
         const isTinted = idx % 2 === 0;
         return (

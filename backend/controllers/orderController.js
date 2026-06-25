@@ -51,8 +51,9 @@ const updateOrderToConfirmed = async (orderId, paymentId) => {
 
       for (const [sId, sellerItems] of Object.entries(itemsBySeller)) {
         const { rows: subOrderRows } = await client.query(
-          `INSERT INTO sub_orders (order_id, seller_id, status) VALUES ($1, $2, $3) RETURNING *`,
-          [order.id, sId, 'confirmed']
+          `INSERT INTO sub_orders (order_id, seller_id, status, order_items)
+           VALUES ($1, $2, $3, $4) RETURNING *`,
+          [order.id, sId, 'confirmed', JSON.stringify(sellerItems)]
         );
         const subOrder = subOrderRows[0];
         const subTotal = sellerItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
@@ -161,21 +162,35 @@ const createOrder = async (req, res, next) => {
       [user_id, parsedAddress.name || 'User', parsedAddress.email || `user_${user_id}@example.com`, parsedAddress.phone || null]
     );
 
-    // Verify stock
+    // Atomically decrement stock for every item inside the open transaction.
+    // A single UPDATE validates AND decrements: if stock < quantity, 0 rows are
+    // affected, which we treat as out-of-stock and ROLLBACK the entire order.
     for (const item of items) {
-      const { rows } = await client.query('SELECT stock, seller_id, name, price FROM products WHERE id = $1 FOR UPDATE', [item.product_id]);
-      if (!rows.length) {
+      // Fetch product details (name, price, seller_id) for order payload enrichment
+      const { rows: pRows } = await client.query(
+        'SELECT stock, seller_id, name, price FROM products WHERE id = $1',
+        [item.product_id]
+      );
+      if (!pRows.length) {
         await client.query('ROLLBACK');
         return res.status(404).json({ success: false, error: `Product ${item.product_id} not found` });
       }
-      if (rows[0].stock < item.quantity) {
+      item.seller_id = pRows[0].seller_id;
+      if (!item.name)  item.name  = pRows[0].name;
+      if (!item.price) item.price = parseFloat(pRows[0].price);
+
+      // Atomic check-and-decrement: affects 0 rows if stock is insufficient
+      const { rowCount } = await client.query(
+        'UPDATE products SET stock = stock - $1 WHERE id = $2 AND stock >= $1',
+        [item.quantity, item.product_id]
+      );
+      if (rowCount === 0) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ success: false, error: `Insufficient stock for product ${item.product_id}` });
+        return res.status(400).json({
+          success: false,
+          error: `Insufficient stock for "${item.name || `product ${item.product_id}`}". Order not placed.`
+        });
       }
-      item.seller_id = rows[0].seller_id;
-      if (!item.name) item.name = rows[0].name;
-      if (!item.price) item.price = parseFloat(rows[0].price);
-      await client.query('UPDATE products SET stock = stock - $1 WHERE id = $2', [item.quantity, item.product_id]);
     }
 
     if (isCod) {
@@ -186,6 +201,22 @@ const createOrder = async (req, res, next) => {
         [user_id, JSON.stringify(items), total_amount, JSON.stringify(address || {})]
       );
       const newOrder = rows[0];
+
+      // Insert sub_orders grouped by seller_id (same logic as Razorpay path)
+      const itemsBySeller = items.reduce((acc, item) => {
+        const sId = item.seller_id || 0;
+        if (!acc[sId]) acc[sId] = [];
+        acc[sId].push(item);
+        return acc;
+      }, {});
+      for (const [sId, sellerItems] of Object.entries(itemsBySeller)) {
+        await client.query(
+          `INSERT INTO sub_orders (order_id, seller_id, status, order_items)
+           VALUES ($1, $2, 'pending_cod', $3)`,
+          [newOrder.id, sId, JSON.stringify(sellerItems)]
+        );
+      }
+
       await client.query('COMMIT');
 
       // Sync to Firestore
@@ -273,6 +304,13 @@ const createOrder = async (req, res, next) => {
 const getOrdersByUser = async (req, res, next) => {
   try {
     const { userId } = req.params;
+    const requestUserId = req.user ? req.user.uid : null;
+    const isAdmin = req.user && req.user.role === 'admin';
+
+    if (requestUserId !== userId && !isAdmin) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
     const { rows } = await db.query('SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
     res.json({ success: true, data: rows, count: rows.length });
   } catch (err) { next(err); }
@@ -282,9 +320,18 @@ const getOrdersByUser = async (req, res, next) => {
 const getOrderById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const requestUserId = req.user ? req.user.uid : null;
+    const isAdmin = req.user && req.user.role === 'admin';
+
     const { rows } = await db.query('SELECT * FROM orders WHERE id = $1', [id]);
     if (!rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
-    res.json({ success: true, data: rows[0] });
+
+    const order = rows[0];
+    if (order.user_id !== requestUserId && !isAdmin) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
+    res.json({ success: true, data: order });
   } catch (err) { next(err); }
 };
 
@@ -389,7 +436,35 @@ const updateOrderStatus = async (req, res, next) => {
 // --------------- POST /api/orders/shiprocket/webhook ---------------
 const shiprocketWebhook = async (req, res, next) => {
   try {
-    const { order_id, current_status } = req.body;
+    // ── Signature Verification ──────────────────────────────────────────
+    // req.body is a raw Buffer because server.js registers express.raw() for this path.
+    // Shiprocket sends X-Shiprocket-Hmac-Sha256 = HMAC-SHA256(rawBody, webhookSecret).
+    const webhookSecret = process.env.SHIPROCKET_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.error('🚨 CRITICAL: SHIPROCKET_WEBHOOK_SECRET is not set. Rejecting webhook.');
+      return res.status(500).send('Webhook secret not configured');
+    }
+
+    const incomingSignature = req.headers['x-shiprocket-hmac-sha256'];
+    if (!incomingSignature) {
+      return res.status(401).send('Missing webhook signature');
+    }
+
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body));
+    const expectedSignature = require('crypto')
+      .createHmac('sha256', webhookSecret)
+      .update(rawBody)
+      .digest('hex');
+
+    if (incomingSignature !== expectedSignature) {
+      console.warn('Shiprocket webhook: invalid signature. Possible spoofed request.');
+      return res.status(401).send('Invalid webhook signature');
+    }
+    // ───────────────────────────────────────────────────────────────────
+
+    // Parse body (already a Buffer from express.raw, so parse it here)
+    const payload = JSON.parse(rawBody.toString('utf8'));
+    const { order_id, current_status } = payload;
     if (!order_id) return res.status(400).send('Missing order_id');
 
     let newStatus = null;
@@ -872,7 +947,8 @@ const downloadInvoice = async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
 
     const order = rows[0];
-    if (order.user_id !== userId) return res.status(403).json({ success: false, error: 'Forbidden' });
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (order.user_id !== userId && !isAdmin) return res.status(403).json({ success: false, error: 'Forbidden' });
 
     const pdfBuffer = await generateInvoicePDF(order);
 

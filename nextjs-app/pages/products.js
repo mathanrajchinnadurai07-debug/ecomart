@@ -27,6 +27,7 @@ const ALL_CATS = [
 export default function Products() {
   const router = useRouter();
   const { addToCart, addToast } = useCart();
+  const [products, setProducts] = useState(ALL_PRODUCTS);
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
@@ -39,6 +40,23 @@ export default function Products() {
   const [mobActiveTab, setMobActiveTab] = useState('category');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [lastQuery, setLastQuery] = useState(null);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/products?limit=1000`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.data) {
+            setProducts(data.data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch products from backend:', err);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -61,7 +79,7 @@ export default function Products() {
     setMinRating(''); setInStockOnly(false); setFeaturedOnly(false); setSortBy('');
   };
 
-  let filtered = [...ALL_PRODUCTS];
+  let filtered = [...products];
   if (router.query.search) {
     const q = router.query.search.toLowerCase();
     filtered = filtered.filter(p => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q));
@@ -71,7 +89,7 @@ export default function Products() {
   if (maxPrice !== '') filtered = filtered.filter(p => (p.discountPrice || p.price) <= parseFloat(maxPrice));
   if (minRating !== '') filtered = filtered.filter(p => p.rating >= parseFloat(minRating));
   if (inStockOnly) filtered = filtered.filter(p => (p.stock ?? 100) > 0);
-  if (featuredOnly) filtered = filtered.filter(p => p.isFeatured);
+  if (featuredOnly) filtered = filtered.filter(p => p.isFeatured || p.is_featured);
   if (sortBy === 'price_low') filtered.sort((a, b) => (a.discountPrice || a.price) - (b.discountPrice || b.price));
   else if (sortBy === 'price_high') filtered.sort((a, b) => (b.discountPrice || b.price) - (a.discountPrice || a.price));
   else if (sortBy === 'rating') filtered.sort((a, b) => b.rating - a.rating);

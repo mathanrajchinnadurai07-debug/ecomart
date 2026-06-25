@@ -5,109 +5,126 @@ import { ALL_PRODUCTS } from '../../data/products';
 import ProductCard from '../../components/ProductCard';
 import { useCart } from '../../context/CartContext';
 
-export default function ProductDetail() {
+export default function ProductDetail({ initialProduct }) {
   const router = useRouter();
   const { id: slug } = router.query;
   const { addToCart, toggleWishlist, isInWishlist, addToast } = useCart();
 
-  const [product, setProduct] = useState(null);
-  const [selectedWeight, setSelectedWeight] = useState('');
+  const [product, setProduct] = useState(initialProduct);
+  const [selectedWeight, setSelectedWeight] = useState(initialProduct?.weights?.[0]?.label || '250g');
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState('description');
-  const [mainImage, setMainImage] = useState('');
-  const [localReviews, setLocalReviews] = useState([]);
+  const [mainImage, setMainImage] = useState(initialProduct?.images?.[0] || initialProduct?.image || '');
+  const [localReviews, setLocalReviews] = useState(initialProduct?.reviews || []);
   
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [loading, setLoading] = useState(!initialProduct);
+  const [relatedProducts, setRelatedProducts] = useState([]);
 
-  // Fetch product from data
+  // Sync state if initialProduct prop or slug changes
   useEffect(() => {
-    if (!slug) return;
-
-    // Search in ALL_PRODUCTS
-    let found = ALL_PRODUCTS.find(p => p.slug === slug || p._id === slug);
-
-    if (!found) {
-      // Create fallback product if not found
-      const IMG = '/assets/images/products/';
-      const imgMap = {
-        'organic-tomato': IMG + 'tomato.png',
-        'organic-millet-cookies': IMG + 'millet_cookies.png',
-        'organic-neem-soap': IMG + 'trail_mix.png',
-        'organic-onion': IMG + 'onion.png',
-        'organic-potato': IMG + 'potato.png',
-        'organic-carrot': IMG + 'carrot.png',
-        'organic-spinach': IMG + 'spinach.png',
-        'organic-broccoli': IMG + 'broccoli.png',
-        'organic-banana': IMG + 'banana.png',
-        'organic-mango': IMG + 'mango.png',
-        'organic-apple': IMG + 'apple.png',
-        'organic-strawberry': IMG + 'strawberry.png',
-        'organic-trail-mix': IMG + 'trail_mix.png'
-      };
-      found = {
-        _id: slug,
-        slug,
-        name: slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-        category: 'grocery',
-        price: 50,
-        discountPrice: 40,
-        rating: 4.3,
-        numReviews: 50,
-        stock: 100,
-        description: 'Premium certified organic product from verified farms.',
-        images: imgMap[slug] ? [imgMap[slug]] : [],
-        weights: [
-          { label: '250g', price: 15, discountPrice: 12 },
-          { label: '500g', price: 28, discountPrice: 22 },
-          { label: '1kg', price: 50, discountPrice: 40 }
-        ],
-        nutritionalInfo: { calories: 'Varies', protein: 'Varies', carbs: 'Varies', fat: 'Varies', fiber: 'Varies' },
-        farmSource: { farmName: 'Organic Farm Partner', location: 'India', description: 'Certified organic farm.' },
-        deliveryInfo: 'Delivered within 2-4 business days. Free delivery above ₹499.',
-        returnPolicy: '7-day return policy with full refund or replacement.',
-        reviews: [],
-        videoUrl: ''
-      };
-    }
-
-    setProduct(found);
-    if (found.weights && found.weights.length > 0) {
-      setSelectedWeight(found.weights[0].label);
-    } else {
-      setSelectedWeight('250g');
-    }
-    setMainImage(found.images?.[0] || found.image || '');
-
-    // Fetch reviews from API
-    const fetchReviews = async () => {
-      try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/reviews/product/${slug}`);
-        if (res.ok) {
-          const data = await res.json();
-          setLocalReviews(data.data || []);
-        } else {
-          // fallback to local storage
-          const saved = JSON.parse(localStorage.getItem('curify_reviews') || '[]');
-          setLocalReviews(saved.filter(r => r.productSlug === slug));
-        }
-      } catch (e) {
-        // fallback
-        const saved = JSON.parse(localStorage.getItem('curify_reviews') || '[]');
-        setLocalReviews(saved.filter(r => r.productSlug === slug));
+    if (initialProduct) {
+      setProduct(initialProduct);
+      if (initialProduct.weights && initialProduct.weights.length > 0) {
+        setSelectedWeight(initialProduct.weights[0].label);
+      } else {
+        setSelectedWeight('250g');
       }
-    };
-    fetchReviews();
+      setMainImage(initialProduct.images?.[0] || initialProduct.image || '');
+      setLocalReviews(initialProduct.reviews || []);
+      setLoading(false);
+    } else if (slug) {
+      setLoading(true);
+      const fetchProduct = async () => {
+        try {
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/products/slug/${slug}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.data) {
+              setProduct(data.data);
+              if (data.data.weights && data.data.weights.length > 0) {
+                setSelectedWeight(data.data.weights[0].label);
+              } else {
+                setSelectedWeight('250g');
+              }
+              setMainImage(data.data.images?.[0] || data.data.image || '');
+              setLocalReviews(data.data.reviews || []);
+            } else {
+              setProduct(null);
+            }
+          } else {
+            setProduct(null);
+          }
+        } catch (e) {
+          console.error(e);
+          setProduct(null);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchProduct();
+    }
+  }, [initialProduct, slug]);
 
-  }, [slug]);
+  // Fetch related products dynamically from backend
+  useEffect(() => {
+    if (product && product.category) {
+      const fetchRelated = async () => {
+        try {
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/products?category=${encodeURIComponent(product.category)}&limit=10`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.data) {
+              const currentId = product.id || product._id;
+              const filtered = data.data
+                .filter(p => p.slug !== product.slug && (p.id || p._id) !== currentId)
+                .slice(0, 4);
+              setRelatedProducts(filtered);
+            }
+          }
+        } catch (e) {
+          console.error('Failed to fetch related products:', e);
+          const fallback = ALL_PRODUCTS
+            .filter(p => p.category === product.category && p.slug !== product.slug)
+            .slice(0, 4);
+          setRelatedProducts(fallback);
+        }
+      };
+      fetchRelated();
+    }
+  }, [product]);
 
-  if (!product) {
+  if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '100px 20px' }}>
         <i className="fas fa-spinner fa-spin" style={{ fontSize: '3rem', color: 'var(--primary)', marginBottom: '16px' }}></i>
         <h2>Loading Product Details...</h2>
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div style={{ textAlign: 'center', padding: '100px 20px', fontFamily: 'Inter, sans-serif' }}>
+        <i className="fas fa-exclamation-triangle" style={{ fontSize: '3rem', color: '#e53935', marginBottom: '16px' }}></i>
+        <h2>Product Not Found</h2>
+        <p style={{ color: '#64748b', marginTop: '8px' }}>The product you are looking for does not exist or has been removed.</p>
+        <Link href="/products" className="btn" style={{
+          marginTop: '20px',
+          display: 'inline-block',
+          background: 'var(--primary)',
+          color: '#fff',
+          padding: '10px 24px',
+          borderRadius: '20px',
+          fontWeight: '600',
+          textDecoration: 'none',
+          boxShadow: '0 4px 12px rgba(26,92,56,0.2)'
+        }}>
+          Back to Shop
+        </Link>
       </div>
     );
   }
@@ -122,7 +139,7 @@ export default function ProductDetail() {
     : (product.discountPrice || product.price);
   const showOriginal = selectedWeightObj 
     ? selectedWeightObj.price 
-    : (product.originalPrice || product.price);
+    : (product.originalPrice || product.original_price || product.price);
   const discount = showOriginal > showPrice 
     ? Math.round(((showOriginal - showPrice) / showOriginal) * 100) 
     : 0;
@@ -188,10 +205,7 @@ export default function ProductDetail() {
     setSubmittingReview(false);
   };
 
-  // Get related products (same category, up to 4, excluding current product)
-  const relatedProducts = ALL_PRODUCTS
-    .filter(p => p.category === product.category && p.slug !== product.slug)
-    .slice(0, 4);
+
 
   return (
     <div className="pd-pg">
@@ -792,4 +806,41 @@ export default function ProductDetail() {
       </div>
     </div>
   );
+}
+
+export async function getServerSideProps(context) {
+  const { id } = context.params;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  
+  try {
+    const res = await fetch(`${apiUrl}/api/products/slug/${id}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.data) {
+        return {
+          props: {
+            initialProduct: json.data,
+            error: null
+          }
+        };
+      }
+    }
+  } catch (e) {
+    console.error('Error fetching product in getServerSideProps:', e);
+  }
+  
+  // Fallback to static list for local dev resilience
+  const found = ALL_PRODUCTS.find(p => p.slug === id || p._id === id);
+  if (found) {
+    return {
+      props: {
+        initialProduct: found,
+        error: null
+      }
+    };
+  }
+  
+  return {
+    notFound: true
+  };
 }

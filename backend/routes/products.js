@@ -6,6 +6,7 @@ const {
   searchProducts,
   getProductsByCategory,
   getProductById,
+  getProductBySlug,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -15,6 +16,7 @@ const {
 router.get('/', apiLimiter, getAllProducts);
 router.get('/search', apiLimiter, searchProducts);
 router.get('/category/:cat', apiLimiter, getProductsByCategory);
+router.get('/slug/:slug', apiLimiter, getProductBySlug);
 router.get('/:id', apiLimiter, getProductById);
 
 // Admin routes (auth required)

@@ -8,6 +8,39 @@ const dotenv = require('dotenv');
 // Load environment variables
 dotenv.config();
 
+// --------------- Startup Secrets Guard ---------------
+// In production, any missing critical env var causes an immediate hard exit.
+// This prevents the app from starting with silent auth bypass or misconfigured webhooks.
+const REQUIRED_IN_PRODUCTION = [
+  'FIREBASE_PROJECT_ID',
+  'FIREBASE_PRIVATE_KEY',
+  'FIREBASE_CLIENT_EMAIL',
+  'RAZORPAY_KEY_ID',
+  'RAZORPAY_KEY_SECRET',
+  'RAZORPAY_WEBHOOK_SECRET',
+  'SHIPROCKET_EMAIL',
+  'SHIPROCKET_PASSWORD',
+  'SHIPROCKET_WEBHOOK_SECRET',
+];
+
+if (process.env.NODE_ENV === 'production') {
+  const missing = REQUIRED_IN_PRODUCTION.filter(k => !process.env[k] || process.env[k].trim() === '');
+  if (missing.length > 0) {
+    console.error('');
+    console.error('🚨 FATAL: Missing required environment variables in production:');
+    missing.forEach(k => console.error('   ❌ ' + k));
+    console.error('');
+    console.error('Server will NOT start. Set all required env vars and restart.');
+    process.exit(1);
+  }
+} else {
+  const missing = REQUIRED_IN_PRODUCTION.filter(k => !process.env[k] || process.env[k].trim() === '');
+  if (missing.length > 0) {
+    console.warn('⚠️  DEV MODE: The following env vars are not set (OK for local dev, required in production):');
+    missing.forEach(k => console.warn('   ⚪ ' + k));
+  }
+}
+
 const app = express();
 
 // --------------- Middleware ---------------
@@ -26,9 +59,11 @@ app.use(cors({
 app.use(morgan('dev'));
 app.use(compression());
 // Webhook must be parsed as raw Buffer before express.json
+// Both Razorpay and Shiprocket webhooks need the raw body for HMAC verification.
 const paymentRoutes = require('./routes/payments');
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 app.use('/api/payments', paymentRoutes);
+app.use('/api/orders/shiprocket/webhook', express.raw({ type: ['application/json', '*/*'] }));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));

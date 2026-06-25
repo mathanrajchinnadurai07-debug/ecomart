@@ -4,7 +4,9 @@ const sellerController = require('../controllers/sellerController');
 const { verifyToken } = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/adminAuth');
 
-router.get('/', sellerController.getSellers);
+// verifyToken required — unauthenticated requests are rejected with 401.
+// Admins receive all fields; non-admins receive public-safe fields only.
+router.get('/', verifyToken, sellerController.getSellers);
 router.post('/', verifyToken, requireAdmin, sellerController.createSeller);
 router.put('/:id', verifyToken, requireAdmin, sellerController.updateSeller);
 router.delete('/:id', verifyToken, requireAdmin, sellerController.deleteSeller);

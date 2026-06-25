@@ -23,7 +23,7 @@ export default function ProductCard({ product }) {
     
   const showOriginal = selectedWeightObj 
     ? selectedWeightObj.price 
-    : (product.originalPrice || product.price);
+    : (product.originalPrice || product.original_price || product.price);
     
   const discount = showOriginal > showPrice 
     ? Math.round(((showOriginal - showPrice) / showOriginal) * 100) 

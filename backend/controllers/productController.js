@@ -2,12 +2,80 @@ const db = require('../config/database');
 const { getCache, setCache, deleteCache, deleteCachePattern, TTL } = require('../config/redis');
 const admin = require('firebase-admin');
 
+/**
+ * Format PostgreSQL DB product object to match frontend API schema.
+ * Handles camelCase vs snake_case mapping, single image vs images array, weights JSONB parsing, etc.
+ */
+const formatProductDbToApi = (p) => {
+  if (!p) return null;
+  
+  let weightsParsed = p.weights;
+  if (typeof weightsParsed === 'string') {
+    try {
+      weightsParsed = JSON.parse(weightsParsed);
+    } catch (e) {
+      weightsParsed = [];
+    }
+  }
+
+  let nutritionalInfoParsed = p.nutritional_info;
+  if (typeof nutritionalInfoParsed === 'string') {
+    try {
+      nutritionalInfoParsed = JSON.parse(nutritionalInfoParsed);
+    } catch (e) {
+      nutritionalInfoParsed = {};
+    }
+  }
+
+  let farmSourceParsed = p.farm_source;
+  if (typeof farmSourceParsed === 'string') {
+    try {
+      farmSourceParsed = JSON.parse(farmSourceParsed);
+    } catch (e) {
+      farmSourceParsed = {};
+    }
+  }
+  
+  return {
+    ...p,
+    _id: p.slug || String(p.id),
+    id: p.id,
+    name: p.name,
+    price: p.price ? parseFloat(p.price) : 0,
+    originalPrice: p.original_price ? parseFloat(p.original_price) : (p.price ? parseFloat(p.price) : 0),
+    original_price: p.original_price ? parseFloat(p.original_price) : (p.price ? parseFloat(p.price) : 0),
+    discount: p.discount || 0,
+    category: p.category,
+    image_url: p.image_url,
+    imageUrl: p.image_url,
+    image: p.image_url,
+    images: p.image_url ? [p.image_url] : [],
+    description: p.description,
+    rating: p.rating ? parseFloat(p.rating) : 4.5,
+    numReviews: p.reviews_count || 0,
+    reviews_count: p.reviews_count || 0,
+    stock: p.stock !== undefined ? p.stock : 100,
+    isFeatured: !!p.is_featured,
+    is_featured: !!p.is_featured,
+    weights: weightsParsed || [],
+    nutritionalInfo: nutritionalInfoParsed || {},
+    nutritional_info: nutritionalInfoParsed || {},
+    farmSource: farmSourceParsed || {},
+    farm_source: farmSourceParsed || {},
+    deliveryInfo: p.delivery_info,
+    delivery_info: p.delivery_info,
+    returnPolicy: p.return_policy,
+    return_policy: p.return_policy,
+    seller_id: p.seller_id
+  };
+};
+
 // --------------- GET /api/products ---------------
 const getAllProducts = async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, sort = 'created_at', order = 'DESC' } = req.query;
+    const { page = 1, limit = 20, sort = 'created_at', order = 'DESC', category } = req.query;
     const offset = (page - 1) * limit;
-    const cacheKey = `products:all:${page}:${limit}:${sort}:${order}`;
+    const cacheKey = `products:all:${page}:${limit}:${sort}:${order}:${category || ''}`;
 
     // Try cache first
     const cached = await getCache(cacheKey);
@@ -18,17 +86,42 @@ const getAllProducts = async (req, res, next) => {
     const sortCol = allowedSorts.includes(sort) ? sort : 'created_at';
     const sortOrder = order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-    const { rows } = await db.query(
-      `SELECT * FROM products ORDER BY ${sortCol} ${sortOrder} LIMIT $1 OFFSET $2`,
-      [limit, offset]
-    );
+    let query = 'SELECT * FROM products';
+    const params = [];
+    let paramCount = 0;
 
-    const countResult = await db.query('SELECT COUNT(*) FROM products');
+    if (category) {
+      paramCount++;
+      query += ` WHERE LOWER(category) = $${paramCount}`;
+      params.push(category.toLowerCase());
+    }
+
+    query += ` ORDER BY ${sortCol} ${sortOrder}`;
+
+    paramCount++;
+    query += ` LIMIT $${paramCount}`;
+    params.push(limit);
+
+    paramCount++;
+    query += ` OFFSET $${paramCount}`;
+    params.push(offset);
+
+    const { rows } = await db.query(query, params);
+
+    let countQuery = 'SELECT COUNT(*) FROM products';
+    const countParams = [];
+    if (category) {
+      countQuery += ' WHERE LOWER(category) = $1';
+      countParams.push(category.toLowerCase());
+    }
+    const countResult = await db.query(countQuery, countParams);
     const total = parseInt(countResult.rows[0].count, 10);
+
+    const formattedRows = rows.map(formatProductDbToApi);
 
     const response = {
       success: true,
-      data: rows,
+      data: formattedRows,
       pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) },
     };
 
@@ -56,7 +149,9 @@ const searchProducts = async (req, res, next) => {
       [`%${q.toLowerCase()}%`]
     );
 
-    const response = { success: true, data: rows, count: rows.length };
+    const formattedRows = rows.map(formatProductDbToApi);
+
+    const response = { success: true, data: formattedRows, count: formattedRows.length };
     await setCache(cacheKey, response, TTL.SEARCH_RESULTS);
     res.json(response);
   } catch (err) {
@@ -78,7 +173,9 @@ const getProductsByCategory = async (req, res, next) => {
       [cat.toLowerCase()]
     );
 
-    const response = { success: true, data: rows, count: rows.length };
+    const formattedRows = rows.map(formatProductDbToApi);
+
+    const response = { success: true, data: formattedRows, count: formattedRows.length };
     await setCache(cacheKey, response, TTL.PRODUCTS_LIST);
     res.json(response);
   } catch (err) {
@@ -106,7 +203,41 @@ const getProductById = async (req, res, next) => {
       [id]
     );
 
-    const response = { success: true, data: { ...rows[0], reviews: reviews.rows } };
+    const productFormatted = formatProductDbToApi(rows[0]);
+
+    const response = { success: true, data: { ...productFormatted, reviews: reviews.rows } };
+    await setCache(cacheKey, response, TTL.SINGLE_PRODUCT);
+    res.json(response);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// --------------- GET /api/products/slug/:slug ---------------
+const getProductBySlug = async (req, res, next) => {
+  try {
+    const { slug } = req.params;
+    const cacheKey = `products:slug:${slug}`;
+
+    const cached = await getCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const { rows } = await db.query('SELECT * FROM products WHERE slug = $1', [slug]);
+    if (!rows.length) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    const product = rows[0];
+
+    // Fetch reviews
+    const reviews = await db.query(
+      'SELECT r.*, u.name AS user_name FROM reviews r JOIN users u ON r.user_id = u.id WHERE r.product_id = $1 ORDER BY r.created_at DESC',
+      [product.id]
+    );
+
+    const productFormatted = formatProductDbToApi(product);
+
+    const response = { success: true, data: { ...productFormatted, reviews: reviews.rows } };
     await setCache(cacheKey, response, TTL.SINGLE_PRODUCT);
     res.json(response);
   } catch (err) {
@@ -165,7 +296,7 @@ const createProduct = async (req, res, next) => {
     // Invalidate product list cache
     await deleteCachePattern('products:*');
 
-    res.status(201).json({ success: true, data: productDb });
+    res.status(201).json({ success: true, data: formatProductDbToApi(productDb) });
   } catch (err) {
     next(err);
   }
@@ -197,7 +328,7 @@ const updateProduct = async (req, res, next) => {
     }
 
     await deleteCachePattern('products:*');
-    res.json({ success: true, data: rows[0] });
+    res.json({ success: true, data: formatProductDbToApi(rows[0]) });
   } catch (err) {
     next(err);
   }
@@ -225,6 +356,7 @@ module.exports = {
   searchProducts,
   getProductsByCategory,
   getProductById,
+  getProductBySlug,
   createProduct,
   updateProduct,
   deleteProduct,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ALL_PRODUCTS } from '../data/products';
 import ProductCard from '../components/ProductCard';
@@ -25,14 +25,32 @@ const CAT_META = {
 
 export default function Categories() {
   const [selectedCat, setSelectedCat] = useState('foryou');
+  const [products, setProducts] = useState(ALL_PRODUCTS);
   const meta = CAT_META[selectedCat] || CAT_META.foryou;
 
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/products?limit=1000`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.data) {
+            setProducts(data.data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch products from backend:', err);
+      }
+    };
+    fetchProducts();
+  }, []);
+
   const catProducts = selectedCat === 'foryou'
-    ? ALL_PRODUCTS.filter(p => p.isFeatured).slice(0, 12)
-    : ALL_PRODUCTS.filter(p => p.category === selectedCat).slice(0, 12);
+    ? products.filter(p => p.isFeatured).slice(0, 12)
+    : products.filter(p => p.category === selectedCat).slice(0, 12);
 
   const popular = selectedCat === 'foryou'
-    ? [...ALL_PRODUCTS].sort((a, b) => b.rating - a.rating).slice(0, 6)
+    ? [...products].sort((a, b) => b.rating - a.rating).slice(0, 6)
     : [];
 
   const getEmoji = (cat) => CAT_META[cat]?.emoji || '🌿';
@@ -200,7 +218,7 @@ export default function Categories() {
                     <div key={c} className="cp-card" onClick={() => setSelectedCat(c)} style={{ cursor: 'pointer' }}>
                       <div className="cp-img" style={{ background: CAT_META[c].color }}><span style={{ fontSize: '2.2rem' }}>{CAT_META[c].emoji}</span></div>
                       <div className="cp-name">{CAT_META[c].title}</div>
-                      <div className="cp-price" style={{ color: '#888', fontWeight: 600, fontSize: '0.65rem' }}>{ALL_PRODUCTS.filter(p => p.category === c).length} products</div>
+                      <div className="cp-price" style={{ color: '#888', fontWeight: 600, fontSize: '0.65rem' }}>{products.filter(p => p.category === c).length} products</div>
                     </div>
                   ))}
                 </div>
@@ -218,7 +236,7 @@ export default function Categories() {
                     </div>
                     <div style={{ padding: '16px 12px 8px' }}>
                       <Link href={`/products?category=${selectedCat}`} style={{ display: 'block', background: 'linear-gradient(135deg,#1a5c38,#2d6a4f)', color: '#fff', padding: '13px', borderRadius: '14px', textDecoration: 'none', textAlign: 'center', fontWeight: '700', fontSize: '0.87rem', fontFamily: 'Poppins,sans-serif' }}>
-                        See All {ALL_PRODUCTS.filter(p => p.category === selectedCat).length} Products →
+                        See All {products.filter(p => p.category === selectedCat).length} Products →
                       </Link>
                     </div>
                   </>

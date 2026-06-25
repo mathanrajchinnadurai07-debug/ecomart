@@ -3,11 +3,34 @@ const axios = require('axios');
 const { authenticateShiprocket } = require('../config/shiprocket');
 
 // GET /api/sellers
+// Admins see all fields; authenticated non-admins see only public-safe fields.
+// PII (phone, address, email, bank/payout details) is stripped for non-admins.
 const getSellers = async (req, res, next) => {
   try {
-    const { rows } = await db.query(
-      'SELECT * FROM sellers ORDER BY name ASC'
-    );
+    const isAdmin = req.user && req.user.role === 'admin';
+
+    let rows;
+    if (isAdmin) {
+      // Full data for admins
+      const result = await db.query('SELECT * FROM sellers ORDER BY name ASC');
+      rows = result.rows;
+    } else {
+      // Fetch sellers; strip PII for all except the seller's own profile.
+      const result = await db.query(
+        'SELECT id, name, email, phone, address, is_active, is_demo FROM sellers WHERE is_active = TRUE ORDER BY name ASC'
+      );
+      rows = result.rows.map(row => {
+        if (req.user && req.user.email === row.email) {
+          // Keep PII for their own profile
+          return row;
+        } else {
+          // Strip PII fields
+          const { email, phone, address, ...publicSafe } = row;
+          return publicSafe;
+        }
+      });
+    }
+
     res.json({ success: true, data: rows, count: rows.length });
   } catch (err) {
     next(err);
