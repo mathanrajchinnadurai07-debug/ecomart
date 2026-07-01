@@ -9,7 +9,7 @@ import { maskEmail, maskPhone, maskPincode, maskAddressLine } from '../middlewar
 
 export default function Checkout() {
   const router = useRouter();
-  const { user, userProfile, cart, removeFromCart, updateCartQuantity, clearCart, addToast } = useCart();
+  const { user, userProfile, cart, removeFromCart, updateCartQuantity, clearCart, addToast, loading: authLoading } = useCart();
   const { language, t } = useLanguage();
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -20,8 +20,17 @@ export default function Checkout() {
   const [isLoadingPayment, setIsLoadingPayment] = useState(false);
   const [maskDataEnabled, setMaskDataEnabled] = useState(true);
 
+  // Page-load Auth Guard
+  useEffect(() => {
+    if (!authLoading && !user) {
+      addToast(language === 'en' ? 'Please login to checkout' : 'செக்அவுட் செய்ய உள்நுழையவும்', 'info');
+      router.push('/login?redirect=/checkout');
+    }
+  }, [user, authLoading]);
+
   useEffect(() => {
     const storedMask = localStorage.getItem('Curify_mask_data');
+
     if (storedMask !== null) {
       setMaskDataEnabled(storedMask === 'true');
     }
@@ -368,6 +377,15 @@ export default function Checkout() {
       addToast('Failed to save order. Try again.', 'error');
     }
   };
+
+  if (authLoading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '100px 20px', background: '#faf8f4', minHeight: '100vh' }}>
+        <i className="fas fa-spinner fa-spin" style={{ fontSize: '3rem', color: 'var(--primary)', marginBottom: '16px' }}></i>
+        <h2 style={{ fontFamily: 'var(--font-heading)' }}>{language === 'en' ? 'Loading checkout...' : 'செக்அவுட் விவரங்கள் ஏற்றப்படுகிறது...'}</h2>
+      </div>
+    );
+  }
 
   return (
     <div className="checkout-pg">

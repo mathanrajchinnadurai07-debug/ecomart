@@ -22,11 +22,13 @@ async function main() {
     `);
     console.log('✅ Added missing columns to products table');
 
-    // Add is_demo column to sellers table
+    // Add is_demo, pickup_location, and razorpay_account_id columns to sellers table
     await query(`
       ALTER TABLE sellers ADD COLUMN IF NOT EXISTS is_demo BOOLEAN DEFAULT FALSE;
+      ALTER TABLE sellers ADD COLUMN IF NOT EXISTS pickup_location VARCHAR(100) DEFAULT 'Primary';
+      ALTER TABLE sellers ADD COLUMN IF NOT EXISTS razorpay_account_id VARCHAR(100);
     `);
-    console.log('✅ Added is_demo column to sellers table');
+    console.log('✅ Added is_demo, pickup_location, and razorpay_account_id columns to sellers table');
 
     // Check if seller_id column exists on products
     const colCheck = await query(`
@@ -40,26 +42,48 @@ async function main() {
       console.log('✅ Added seller_id column to products table');
     }
 
-    // Insert or select demo seller
-    console.log('👤 Inserting demo vendor account...');
-    const sellerRes = await query(`
-      INSERT INTO sellers (name, email, address, is_demo, is_active)
+    // Insert or select central seller
+    console.log('👤 Inserting Central Store vendor account...');
+    const centralRes = await query(`
+      INSERT INTO sellers (name, email, address, pickup_location, razorpay_account_id, is_demo, is_active)
       VALUES (
-        'Curify Demo Store',
-        'demo@curify.com',
-        '{"street": "Demo Street", "city": "Mumbai", "state": "MH", "zip": "400001"}'::jsonb,
+        'Curify Central Store',
+        'store@curify.com',
+        '{"street": "100 Moringa Way", "city": "Madurai", "state": "TN", "zip": "625001"}'::jsonb,
+        'Central_Warehouse',
+        'acc_12345_store',
         TRUE,
         TRUE
       )
       ON CONFLICT (email) DO UPDATE
-      SET is_demo = TRUE, name = EXCLUDED.name
+      SET name = EXCLUDED.name, pickup_location = EXCLUDED.pickup_location, razorpay_account_id = EXCLUDED.razorpay_account_id
       RETURNING id;
     `);
-    const sellerId = sellerRes.rows[0].id;
-    console.log(`✅ Demo vendor confirmed with ID: ${sellerId}`);
+    const centralSellerId = centralRes.rows[0].id;
+    console.log(`✅ Central Store vendor confirmed with ID: ${centralSellerId}`);
 
-    // Now safe to set NOT NULL constraint on seller_id since products table is empty or we will assign them all to the demo seller
-    await query('UPDATE products SET seller_id = $1 WHERE seller_id IS NULL', [sellerId]);
+    // Insert or select demo seller
+    console.log('👤 Inserting Demo Store vendor account...');
+    const demoRes = await query(`
+      INSERT INTO sellers (name, email, address, pickup_location, razorpay_account_id, is_demo, is_active)
+      VALUES (
+        'Curify Demo Store',
+        'demo@curify.com',
+        '{"street": "200 Rice Husk Road", "city": "Chennai", "state": "TN", "zip": "600001"}'::jsonb,
+        'Primary',
+        'acc_12345_demo',
+        TRUE,
+        TRUE
+      )
+      ON CONFLICT (email) DO UPDATE
+      SET name = EXCLUDED.name, pickup_location = EXCLUDED.pickup_location, razorpay_account_id = EXCLUDED.razorpay_account_id
+      RETURNING id;
+    `);
+    const demoSellerId = demoRes.rows[0].id;
+    console.log(`✅ Demo vendor confirmed with ID: ${demoSellerId}`);
+
+    // Now safe to set NOT NULL constraint on seller_id since products table is empty or we will assign them all to the central seller
+    await query('UPDATE products SET seller_id = $1 WHERE seller_id IS NULL', [centralSellerId]);
     await query('ALTER TABLE products ALTER COLUMN seller_id SET NOT NULL');
     console.log('✅ Set seller_id NOT NULL constraint on products table');
 
@@ -89,11 +113,7 @@ async function main() {
     }
     console.log('✅ Deduplication check passed: 0 duplicate slugs found.');
 
-    // Clear existing products for this seller to ensure idempotency
-    console.log(`🗑️ Clearing existing products for seller ID: ${sellerId} to prevent duplicates...`);
-    await query('DELETE FROM products WHERE seller_id = $1', [sellerId]);
-
-    // Insert products
+    // Insert products with upsert (ON CONFLICT DO UPDATE) to preserve IDs
     let insertedCount = 0;
     for (const p of ALL_PRODUCTS) {
       // 1. Core pricing mapping correctness resolution:
@@ -122,6 +142,10 @@ async function main() {
       const deliveryInfo = p.deliveryInfo || null;
       const returnPolicy = p.returnPolicy || null;
 
+      // Assign to different sellers based on category
+      const isCentralCategory = ['vegetables', 'fruits', 'grocery'].includes((p.category || '').toLowerCase());
+      const productSellerId = isCentralCategory ? centralSellerId : demoSellerId;
+
       const insertSql = `
         INSERT INTO products (
           name, slug, price, original_price, discount, category, image_url, description,
@@ -130,6 +154,24 @@ async function main() {
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
         )
+        ON CONFLICT (slug) DO UPDATE SET
+          name = EXCLUDED.name,
+          price = EXCLUDED.price,
+          original_price = EXCLUDED.original_price,
+          discount = EXCLUDED.discount,
+          category = EXCLUDED.category,
+          image_url = EXCLUDED.image_url,
+          description = EXCLUDED.description,
+          rating = EXCLUDED.rating,
+          reviews_count = EXCLUDED.reviews_count,
+          stock = EXCLUDED.stock,
+          weights = EXCLUDED.weights,
+          is_featured = EXCLUDED.is_featured,
+          nutritional_info = EXCLUDED.nutritional_info,
+          farm_source = EXCLUDED.farm_source,
+          delivery_info = EXCLUDED.delivery_info,
+          return_policy = EXCLUDED.return_policy,
+          seller_id = EXCLUDED.seller_id
       `;
 
       await query(insertSql, [
@@ -150,7 +192,7 @@ async function main() {
         JSON.stringify(farmSource),
         deliveryInfo,
         returnPolicy,
-        sellerId
+        productSellerId
       ]);
       insertedCount++;
     }
@@ -158,18 +200,19 @@ async function main() {
     console.log(`🎉 Successfully seeded ${insertedCount} products into database!`);
 
     // Verification Spot Check
-    const countRes = await query('SELECT COUNT(*) FROM products WHERE seller_id = $1', [sellerId]);
-    console.log(`🔍 Verification: DB now has ${countRes.rows[0].count} products for demo seller.`);
+    const countRes1 = await query('SELECT COUNT(*) FROM products WHERE seller_id = $1', [centralSellerId]);
+    const countRes2 = await query('SELECT COUNT(*) FROM products WHERE seller_id = $1', [demoSellerId]);
+    console.log(`🔍 Verification: DB now has ${countRes1.rows[0].count} products for Central Store, and ${countRes2.rows[0].count} for Demo Store.`);
 
     const sampleRes = await query(`
-      SELECT name, slug, price, original_price, discount 
+      SELECT name, slug, price, original_price, discount, seller_id 
       FROM products 
-      WHERE seller_id = $1 AND slug IN ('ragi-cookies', 'millet-biscuits', 'jaggery-cookies')
+      WHERE slug IN ('ragi-cookies', 'millet-biscuits', 'jaggery-cookies')
       ORDER BY slug
-    `, [sellerId]);
+    `);
     console.log('🔍 Spot check of pricing mapping on 3 sample products:');
     sampleRes.rows.forEach(row => {
-      console.log(`   - ${row.name} (${row.slug}): price = ${row.price}, original_price = ${row.original_price}, discount = ${row.discount}%`);
+      console.log(`   - ${row.name} (${row.slug}): price = ${row.price}, original_price = ${row.original_price}, discount = ${row.discount}%, seller_id = ${row.seller_id}`);
     });
 
   } catch (err) {

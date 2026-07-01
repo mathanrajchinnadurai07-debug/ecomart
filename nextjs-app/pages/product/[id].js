@@ -68,8 +68,12 @@ export default function ProductDetail({ initialProduct }) {
         }
       };
       fetchProduct();
+    } else if (router.isReady && !slug) {
+      // Router is ready, but no slug parameter exists (loading fallback handler)
+      setProduct(null);
+      setLoading(false);
     }
-  }, [initialProduct, slug]);
+  }, [initialProduct, slug, router.isReady]);
 
   // Fetch related products dynamically from backend and filter by SAME seller
   useEffect(() => {

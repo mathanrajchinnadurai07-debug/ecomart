@@ -91,6 +91,17 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Test auth path (gated strictly to test environments)
+if (process.env.NODE_ENV === 'test') {
+  app.post('/api/test/auth/token', (req, res) => {
+    const { uid = 'test_uid', email = 'test@example.com', role = 'customer', name = 'Test User' } = req.body;
+    const payload = { uid, email, role, name };
+    const token = 'test_jwt_' + Buffer.from(JSON.stringify(payload)).toString('base64');
+    res.json({ token });
+  });
+  console.log('🧪 Mounted test-only auth token path (/api/test/auth/token)');
+}
+
 // --------------- Error Handler ---------------
 const errorHandler = require('./middleware/errorHandler');
 app.use(errorHandler);

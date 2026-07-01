@@ -121,6 +121,9 @@ const updateOrderToConfirmed = async (orderId, paymentId) => {
         return acc;
       }, {});
 
+      // Read Platform Commission Percentage from env (default 10% if not configured)
+      const commissionPct = parseFloat(process.env.PLATFORM_COMMISSION_PCT) || 10;
+
       for (const [sId, sellerItems] of Object.entries(itemsBySeller)) {
         const { rows: subOrderRows } = await client.query(
           `INSERT INTO sub_orders (order_id, seller_id, status, order_items)
@@ -130,42 +133,113 @@ const updateOrderToConfirmed = async (orderId, paymentId) => {
         const subOrder = subOrderRows[0];
         const subTotal = sellerItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
 
-        const shiprocketData = {
-          order_id: `${order.id}-${subOrder.id}`,
-          order_date: new Date().toISOString().slice(0, 10),
-          pickup_location: "Primary",
-          billing_customer_name: firstName,
-          billing_last_name: lastName,
-          billing_address: parsedAddress.line1 || 'Address',
-          billing_address_2: parsedAddress.line2 || '',
-          billing_city: parsedAddress.city || 'City',
-          billing_pincode: parsedAddress.pincode || '000000',
-          billing_state: parsedAddress.state || 'State',
-          billing_country: "India",
-          billing_email: parsedAddress.email || "test@example.com",
-          billing_phone: parsedAddress.phone || "0000000000",
-          shipping_is_billing: true,
-          order_items: sellerItems.map(i => ({
-            name: i.name || `Product ${i.product_id}`,
-            sku: `SKU-${i.product_id}`,
-            units: i.quantity,
-            selling_price: i.price,
-            discount: 0,
-            tax: 0,
-            hsn: ""
-          })),
-          payment_method: 'Prepaid',
-          sub_total: subTotal,
-          length: 10, breadth: 10, height: 10, weight: 1
-        };
+        // Fetch seller details (Single database query for both logistics and split routing)
+        let seller = null;
+        try {
+          const { rows: sellerRows } = await client.query(
+            'SELECT id, name, pickup_location, razorpay_account_id FROM sellers WHERE id = $1',
+            [sId]
+          );
+          if (sellerRows.length > 0) {
+            seller = sellerRows[0];
+          } else {
+            console.warn(`⚠️ Seller with ID ${sId} not found in database. Skipping Shiprocket and payment transfers for this sub-order.`);
+          }
+        } catch (sellerErr) {
+          console.error(`🚨 Error fetching seller ${sId} details:`, sellerErr.message);
+        }
 
-        const srRes = await createShiprocketOrder(shiprocketData);
-        if (srRes && srRes.order_id) {
-          await client.query('UPDATE sub_orders SET shiprocket_order_id = $1 WHERE id = $2', [srRes.order_id, subOrder.id]);
+        if (seller) {
+          // --- Phase 3: Shiprocket Order Creation using dynamic pickup location ---
+          try {
+            const pickupLocation = seller.pickup_location || 'Primary';
+            const shiprocketData = {
+              order_id: `${order.id}-${subOrder.id}`,
+              order_date: new Date().toISOString().slice(0, 10),
+              pickup_location: pickupLocation,
+              billing_customer_name: firstName,
+              billing_last_name: lastName,
+              billing_address: parsedAddress.line1 || 'Address',
+              billing_address_2: parsedAddress.line2 || '',
+              billing_city: parsedAddress.city || 'City',
+              billing_pincode: parsedAddress.pincode || '000000',
+              billing_state: parsedAddress.state || 'State',
+              billing_country: "India",
+              billing_email: parsedAddress.email || "test@example.com",
+              billing_phone: parsedAddress.phone || "0000000000",
+              shipping_is_billing: true,
+              order_items: sellerItems.map(i => ({
+                name: i.name || `Product ${i.product_id}`,
+                sku: `SKU-${i.product_id}`,
+                units: i.quantity,
+                selling_price: i.price,
+                discount: 0,
+                tax: 0,
+                hsn: ""
+              })),
+              payment_method: 'Prepaid',
+              sub_total: subTotal,
+              length: 10, breadth: 10, height: 10, weight: 1
+            };
+
+            const srRes = await createShiprocketOrder(shiprocketData);
+            if (srRes && srRes.order_id) {
+              await client.query('UPDATE sub_orders SET shiprocket_order_id = $1 WHERE id = $2', [srRes.order_id, subOrder.id]);
+            }
+          } catch (srErr) {
+            console.error(`🚨 Shiprocket order creation failed for sub-order ${subOrder.id}:`, srErr.message);
+          }
+
+          // --- Phase 4: Razorpay Route Split Payments ---
+          const isCod = order.payment_method === 'cod' || !paymentId;
+          if (!isCod && seller.razorpay_account_id) {
+            try {
+              // Calculate split amount (subtotal - commission fee)
+              const commissionAmount = parseFloat(((subTotal * commissionPct) / 100).toFixed(2));
+              const splitAmount = Math.max(0, subTotal - commissionAmount);
+
+              const mockPayments = process.env.MOCK_PAYMENTS === 'true' || 
+                                   !process.env.RAZORPAY_KEY_SECRET || 
+                                   process.env.NODE_ENV === 'test';
+
+              if (mockPayments) {
+                // Mock wrapper seam
+                console.warn(`[MOCK] razorpay.transfers.create called for account: ${seller.razorpay_account_id}, subtotal: ₹${subTotal}, commission (${commissionPct}%): ₹${commissionAmount}, transfer: ₹${splitAmount}`);
+                const mockResponse = {
+                  id: "trf_mock_" + Math.random().toString(36).substr(2, 9),
+                  entity: "transfer",
+                  account: seller.razorpay_account_id,
+                  amount: Math.round(splitAmount * 100),
+                  currency: "INR",
+                  status: "processed"
+                };
+                console.log(`[MOCK] Transfer success:`, JSON.stringify(mockResponse));
+              } else {
+                // Real Route Integration
+                const razorpay = new Razorpay({
+                  key_id: process.env.RAZORPAY_KEY_ID,
+                  key_secret: process.env.RAZORPAY_KEY_SECRET,
+                });
+
+                console.log(`Sending real transfer to Razorpay for account ${seller.razorpay_account_id} with amount ₹${splitAmount}`);
+                await razorpay.transfers.create({
+                  account: seller.razorpay_account_id,
+                  amount: Math.round(splitAmount * 100),
+                  currency: 'INR',
+                  notes: {
+                    order_id: order.id.toString(),
+                    sub_order_id: subOrder.id.toString()
+                  }
+                });
+              }
+            } catch (rzpTransferErr) {
+              console.error(`🚨 Razorpay Route Transfer failed for sub-order ${subOrder.id}:`, rzpTransferErr.message);
+            }
+          }
         }
       }
-    } catch (srErr) {
-      console.error('Shiprocket multi-vendor order creation failed:', srErr);
+    } catch (orderSplitErr) {
+      console.error('Multi-vendor order split handling failed:', orderSplitErr);
     }
 
     // 4. Delivery Jobs

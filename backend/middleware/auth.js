@@ -57,6 +57,23 @@ const verifyToken = async (req, res, next) => {
     }
 
     const token = authHeader.split('Bearer ')[1];
+
+    // Gated test-only token verification path
+    if (process.env.NODE_ENV === 'test' && token.startsWith('test_jwt_')) {
+      try {
+        const decodedPayload = JSON.parse(Buffer.from(token.replace('test_jwt_', ''), 'base64').toString('utf8'));
+        req.user = {
+          uid: decodedPayload.uid,
+          email: decodedPayload.email,
+          name: decodedPayload.name || 'Test User',
+          role: decodedPayload.role || 'customer'
+        };
+        return next();
+      } catch (err) {
+        return res.status(401).json({ error: 'Unauthorized – invalid test token' });
+      }
+    }
+
     const decoded = await admin.auth().verifyIdToken(token);
 
     req.user = {

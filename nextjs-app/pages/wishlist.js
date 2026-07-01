@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useCart } from '../context/CartContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -38,9 +39,18 @@ const LOCAL_T = {
 };
 
 export default function WishlistPage() {
-  const { wishlist, removeFromWishlist, addToCart, addToast, user } = useCart();
+  const router = useRouter();
+  const { wishlist, removeFromWishlist, addToCart, addToast, user, loading: authLoading } = useCart();
   const { language } = useLanguage();
   const currentT = LOCAL_T[language] || LOCAL_T.en;
+
+  // Page-load Auth Guard
+  useEffect(() => {
+    if (!authLoading && !user) {
+      addToast(language === 'en' ? 'Please login to view your wishlist' : 'விருப்பப்பட்டியலைக் காண உள்நுழையவும்', 'info');
+      router.push('/login?redirect=/wishlist');
+    }
+  }, [user, authLoading]);
 
   // Resolve full product data from IDs in wishlist
   const wishlistProducts = wishlist
@@ -51,6 +61,15 @@ export default function WishlistPage() {
     addToCart(product, 1);
     addToast(`${product.name} added to cart!`, 'success');
   };
+
+  if (authLoading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '100px 20px', background: '#faf8f4', minHeight: '100vh' }}>
+        <i className="fas fa-spinner fa-spin" style={{ fontSize: '3rem', color: 'var(--primary)', marginBottom: '16px' }}></i>
+        <h2 style={{ fontFamily: 'var(--font-heading)' }}>{language === 'en' ? 'Loading wishlist...' : 'விருப்பப்பட்டியல் விவரங்கள் ஏற்றப்படுகிறது...'}</h2>
+      </div>
+    );
+  }
 
   return (
     <>
