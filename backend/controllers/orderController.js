@@ -7,6 +7,7 @@ const { createShiprocketOrder } = require('../config/shiprocket');
 const { sendOrderConfirmationEmail, sendOrderStatusUpdateEmail } = require('../utils/email');
 const { createDeliveryJobs, sendDeliveryNotifications } = require('../services/deliveryService');
 const { generateInvoicePDF } = require('../utils/invoice');
+const { PLATFORM_COMMISSION_PCT } = require('../config/constants');
 
 // --------------- HELPER: SYNC ORDER TO FIRESTORE ---------------
 const syncOrderToFirestore = async (orderId) => {
@@ -121,8 +122,8 @@ const updateOrderToConfirmed = async (orderId, paymentId) => {
         return acc;
       }, {});
 
-      // Read Platform Commission Percentage from env (default 10% if not configured)
-      const commissionPct = parseFloat(process.env.PLATFORM_COMMISSION_PCT) || 10;
+      // Read Platform Commission Percentage from centralized configuration
+      const commissionPct = PLATFORM_COMMISSION_PCT;
 
       for (const [sId, sellerItems] of Object.entries(itemsBySeller)) {
         const { rows: subOrderRows } = await client.query(
@@ -144,9 +145,17 @@ const updateOrderToConfirmed = async (orderId, paymentId) => {
             seller = sellerRows[0];
           } else {
             console.warn(`⚠️ Seller with ID ${sId} not found in database. Skipping Shiprocket and payment transfers for this sub-order.`);
+            await client.query(
+              "UPDATE sub_orders SET fulfillment_status = 'needs_attention' WHERE id = $1",
+              [subOrder.id]
+            );
           }
         } catch (sellerErr) {
           console.error(`🚨 Error fetching seller ${sId} details:`, sellerErr.message);
+          await client.query(
+            "UPDATE sub_orders SET fulfillment_status = 'needs_attention' WHERE id = $1",
+            [subOrder.id]
+          ).catch(console.error);
         }
 
         if (seller) {

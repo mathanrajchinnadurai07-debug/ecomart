@@ -30,6 +30,12 @@ async function main() {
     `);
     console.log('✅ Added is_demo, pickup_location, and razorpay_account_id columns to sellers table');
 
+    // Add fulfillment_status column to sub_orders table
+    await query(`
+      ALTER TABLE sub_orders ADD COLUMN IF NOT EXISTS fulfillment_status VARCHAR(50);
+    `);
+    console.log('✅ Added fulfillment_status column to sub_orders table');
+
     // Check if seller_id column exists on products
     const colCheck = await query(`
       SELECT column_name FROM information_schema.columns 
@@ -204,13 +210,25 @@ async function main() {
     const countRes2 = await query('SELECT COUNT(*) FROM products WHERE seller_id = $1', [demoSellerId]);
     console.log(`🔍 Verification: DB now has ${countRes1.rows[0].count} products for Central Store, and ${countRes2.rows[0].count} for Demo Store.`);
 
+    console.log('\n📊 Seeding Category Breakdown per Seller:');
+    const breakdownRes = await query(`
+      SELECT seller_id, category, COUNT(*) as cnt 
+      FROM products 
+      GROUP BY seller_id, category 
+      ORDER BY seller_id, cnt DESC
+    `);
+    breakdownRes.rows.forEach(row => {
+      const sellerLabel = row.seller_id === centralSellerId ? 'Central Store (Seller 1)' : 'Demo Store (Seller 2)';
+      console.log(`   - ${sellerLabel} | Category: "${row.category}" | Count: ${row.cnt}`);
+    });
+
     const sampleRes = await query(`
       SELECT name, slug, price, original_price, discount, seller_id 
       FROM products 
       WHERE slug IN ('ragi-cookies', 'millet-biscuits', 'jaggery-cookies')
       ORDER BY slug
     `);
-    console.log('🔍 Spot check of pricing mapping on 3 sample products:');
+    console.log('\n🔍 Spot check of pricing mapping on 3 sample products:');
     sampleRes.rows.forEach(row => {
       console.log(`   - ${row.name} (${row.slug}): price = ${row.price}, original_price = ${row.original_price}, discount = ${row.discount}%, seller_id = ${row.seller_id}`);
     });

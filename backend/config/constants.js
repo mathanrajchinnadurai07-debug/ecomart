@@ -3,4 +3,5 @@ module.exports = {
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'CurifyAdmin2026',
   DELIVERY_PARTNER_EMAIL: process.env.DELIVERY_PARTNER_EMAIL || 'curfee01@gmail.com',
   DEFAULT_SELLER_EMAIL: process.env.DEFAULT_SELLER_EMAIL || 'madhanrajchinnadurai17@gmail.com',
+  PLATFORM_COMMISSION_PCT: parseFloat(process.env.PLATFORM_COMMISSION_PCT) || 10,
 };

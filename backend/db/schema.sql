@@ -142,3 +142,6 @@ CREATE INDEX IF NOT EXISTS idx_order_status_history_order_id ON order_status_his
 -- Sellers table updates (additive-only)
 ALTER TABLE sellers ADD COLUMN IF NOT EXISTS pickup_location VARCHAR(100) DEFAULT 'Primary';
 ALTER TABLE sellers ADD COLUMN IF NOT EXISTS razorpay_account_id VARCHAR(100);
+
+-- Sub-orders table updates (additive-only)
+ALTER TABLE sub_orders ADD COLUMN IF NOT EXISTS fulfillment_status VARCHAR(50);
